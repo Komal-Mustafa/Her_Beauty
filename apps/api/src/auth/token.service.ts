@@ -34,7 +34,17 @@ const ChallengeClaims = z.object({
   sub: z.uuid(),
   aud: AuthAudience,
   typ: z.enum(['mfa', 'mfa_setup']),
+  jti: z.string().min(1).max(64),
+  exp: z.number().int(),
 });
+
+/** A verified challenge token. `jti` + `expiresAt` let the caller make it single use. */
+export interface ChallengeClaimsOut {
+  userId: string;
+  audience: AuthAudience;
+  jti: string;
+  expiresAt: Date;
+}
 
 export interface AccessTokenInput {
   userId: string;
@@ -105,15 +115,13 @@ export class TokenService {
     return { token, expiresInSec: CHALLENGE_TOKEN_TTL_SEC };
   }
 
-  async verifyChallenge(
-    token: string,
-    typ: ChallengeType,
-  ): Promise<{ userId: string; audience: AuthAudience }> {
+  async verifyChallenge(token: string, typ: ChallengeType): Promise<ChallengeClaimsOut> {
     const parsed = ChallengeClaims.safeParse(await this.verify(token));
     if (!parsed.success || parsed.data.typ !== typ) {
       throw new InvalidTokenError('not a challenge token of this type');
     }
-    return { userId: parsed.data.sub, audience: parsed.data.aud };
+    const c = parsed.data;
+    return { userId: c.sub, audience: c.aud, jti: c.jti, expiresAt: new Date(c.exp * 1000) };
   }
 
   private async verify(token: string): Promise<JWTPayload> {

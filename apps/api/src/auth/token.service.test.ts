@@ -54,6 +54,8 @@ describe('TokenService', () => {
     await expect(tokens.verifyChallenge(mfa.token, 'mfa')).resolves.toEqual({
       userId,
       audience: 'admin',
+      jti: expect.any(String),
+      expiresAt: expect.any(Date),
     });
     await expect(tokens.verifyChallenge(mfa.token, 'mfa_setup')).rejects.toThrow();
     await expect(tokens.verifyChallenge(setup.token, 'mfa')).rejects.toThrow();

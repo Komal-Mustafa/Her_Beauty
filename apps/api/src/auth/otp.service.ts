@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { uuidv7, type Prisma } from '@hb/db';
+import { Prisma, uuidv7 } from '@hb/db';
 import { hmacSha256Hex, randomDigits, randomToken, safeEqual } from '../common/crypto';
 import { APP_CONFIG, type AppConfig } from '../config/config';
 import { MESSAGE_PROVIDER, type MessageProvider } from '../messaging/message-provider';
@@ -14,8 +14,11 @@ export const OTP_SEND_LIMIT = 3;
 export const OTP_SEND_WINDOW_MS = 15 * 60_000;
 const CODE_DIGITS = 6;
 
-/** otp_codes.purpose values written by B2. "notice" rows only count towards the send limits. */
-export type StoredPurpose = 'login' | 'verify' | 'reset' | 'notice';
+/**
+ * otp_codes.purpose values written by B2. "notice" rows only count towards the send limits;
+ * "challenge" rows mark used 2FA challenge tokens (no request IP, so they count towards nothing).
+ */
+export type StoredPurpose = 'login' | 'verify' | 'reset' | 'notice' | 'challenge';
 
 /**
  * One-time codes (docs/b2-auth.md §4): 6 digits, HMAC-SHA256(OTP_PEPPER, purpose|target|code)
@@ -142,6 +145,38 @@ export class OtpService {
   async checkAndConsume(target: string, purpose: StoredPurpose, code: string): Promise<boolean> {
     const id = await this.check(target, purpose, code);
     return id !== null && (await this.consume(id));
+  }
+
+  /** Has this challenge token (by jti) already completed a sign-in? */
+  async isChallengeUsed(userId: string, jti: string): Promise<boolean> {
+    const row = await this.db.otpCode.findFirst({
+      where: { purpose: 'challenge', codeHash: this.hash('challenge', userId, jti) },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
+  /**
+   * Mark a challenge token used, kept until it expires. False when it was already used: a
+   * partial unique index on code_hash (purpose 'challenge') lets only one racing request win.
+   */
+  async useChallenge(userId: string, jti: string, expiresAt: Date): Promise<boolean> {
+    try {
+      await this.db.otpCode.create({
+        data: {
+          id: uuidv7(),
+          target: userId,
+          purpose: 'challenge',
+          codeHash: this.hash('challenge', userId, jti),
+          expiresAt,
+          usedAt: new Date(),
+        },
+      });
+      return true;
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return false;
+      throw e;
+    }
   }
 
   async deliver(to: Identifier, message: MessageText): Promise<void> {

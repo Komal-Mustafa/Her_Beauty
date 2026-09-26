@@ -23,16 +23,28 @@ import {
   unauthenticated,
 } from './auth-errors';
 import { LockoutService } from './lockout.service';
+import { OtpService } from './otp.service';
 import { PasswordService } from './password.service';
 import { SessionService } from './session.service';
 import { audienceAllows, SignInService } from './sign-in.service';
-import { InvalidTokenError, TokenService, type ChallengeType } from './token.service';
+import {
+  InvalidTokenError,
+  TokenService,
+  type ChallengeClaimsOut,
+  type ChallengeType,
+} from './token.service';
 import { TwoFactorService } from './two-factor.service';
 
+/** A verified, not yet used challenge token (docs/b2-auth.md §3). */
+interface Challenge {
+  user: User;
+  audience: AuthAudience;
+  jti: string;
+  expiresAt: Date;
+}
+
 /** Who is doing a 2FA step: a signed-in user, or someone half-way through an admin login. */
-type Actor =
-  | { via: 'bearer'; user: User; auth: AuthContext }
-  | { via: 'challenge'; user: User; audience: AuthAudience };
+type Actor = { via: 'bearer'; user: User; auth: AuthContext } | ({ via: 'challenge' } & Challenge);
 
 const expiredChallenge = () => unauthenticated('Your sign-in expired. Please sign in again.');
 
@@ -44,6 +56,7 @@ export class MfaService {
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(TwoFactorService) private readonly twoFactor: TwoFactorService,
     @Inject(LockoutService) private readonly lockout: LockoutService,
+    @Inject(OtpService) private readonly otp: OtpService,
     @Inject(PasswordService) private readonly passwords: PasswordService,
     @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(SignInService) private readonly signIn: SignInService,
@@ -52,11 +65,13 @@ export class MfaService {
 
   /** Finish a login with a TOTP or backup code. Each wrong code counts as a failed login. */
   async challenge(body: TwoFactorChallengeRequest, client: ClientContext): Promise<LoginResult> {
-    const { user, audience } = await this.fromChallenge(body.challengeToken, 'mfa');
+    const challenge = await this.fromChallenge(body.challengeToken, 'mfa');
+    const { user, audience } = challenge;
     if (!user.twofaEnabledAt) throw invalidCredentials();
     if (!(await this.twoFactor.verifySecondFactor(user, body.code))) {
       await this.failSecondFactor(user, audience, client);
     }
+    await this.useChallenge(challenge);
     return this.signIn.finish(user, audience, client, true);
   }
 
@@ -85,6 +100,7 @@ export class MfaService {
       await this.sessions.markMfa(actor.auth.sessionId);
       return { backupCodes };
     }
+    await this.useChallenge(actor);
     const login = await this.signIn.finish(actor.user, actor.audience, client, true);
     return { backupCodes, login };
   }
@@ -120,8 +136,7 @@ export class MfaService {
     auth: AuthContext | undefined,
   ): Promise<Actor> {
     if (challengeToken) {
-      const { user, audience } = await this.fromChallenge(challengeToken, 'mfa_setup');
-      return { via: 'challenge', user, audience };
+      return { via: 'challenge', ...(await this.fromChallenge(challengeToken, 'mfa_setup')) };
     }
     if (!auth) throw unauthenticated();
     const user = await this.users.findActiveById(auth.userId);
@@ -129,20 +144,29 @@ export class MfaService {
     return { via: 'bearer', user, auth };
   }
 
-  /** Verify a challenge token and re-check the account: still active, unlocked, allowed in. */
-  private async fromChallenge(token: string, typ: ChallengeType) {
-    let claims: { userId: string; audience: AuthAudience };
+  /**
+   * Verify a challenge token, refuse one that already completed a sign-in, and re-check the
+   * account: still active, unlocked, allowed in.
+   */
+  private async fromChallenge(token: string, typ: ChallengeType): Promise<Challenge> {
+    let claims: ChallengeClaimsOut;
     try {
       claims = await this.tokens.verifyChallenge(token, typ);
     } catch (e) {
       if (e instanceof InvalidTokenError) throw expiredChallenge();
       throw e;
     }
+    if (await this.otp.isChallengeUsed(claims.userId, claims.jti)) throw expiredChallenge();
     const user = await this.users.findActiveById(claims.userId);
     if (!user || this.lockout.isLocked(user) || !audienceAllows(claims.audience, user.role)) {
       throw invalidCredentials();
     }
-    return { user, audience: claims.audience };
+    return { user, audience: claims.audience, jti: claims.jti, expiresAt: claims.expiresAt };
+  }
+
+  /** A challenge token completes one sign-in only; a racing second completion is refused. */
+  private async useChallenge(c: Challenge): Promise<void> {
+    if (!(await this.otp.useChallenge(c.user.id, c.jti, c.expiresAt))) throw expiredChallenge();
   }
 
   private async failSecondFactor(

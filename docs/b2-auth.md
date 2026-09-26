@@ -84,7 +84,10 @@ otp/send 5/min, otp/verify 10/min, password/* 5/min, 2fa/challenge 10/min, refre
 
 **Challenge token**: JWT (same key), `typ: "mfa"` or `"mfa_setup"`, `aud`, `sub`, `jti`, **5 minutes**.
 It is **not** an access token: the auth guard rejects any token whose `typ` is set. It proves the password step
-only; every TOTP attempt against it counts as a failed login on failure.
+only; every TOTP attempt against it counts as a failed login on failure. It is **single use**: when it completes
+a sign-in (`/2fa/challenge`, or `/2fa/enable` with a setup token) an `otp_codes` row with purpose `challenge`
+stores `HMAC(OTP_PEPPER, challenge|userId|jti)` until the token expires, and a partial unique index on it lets
+only one of two racing requests finish. A spent token answers `401 UNAUTHENTICATED` before any code is checked.
 
 ## 4. Passwords, OTP, 2FA, lockout
 
@@ -154,6 +157,8 @@ Follow-up migrations (B2 fixes):
 - `20260926160000_b2_session_revoked_reason`: `sessions.revoked_reason text` + CHECK (allowed values, only on a
   revoked row). Backfill: a revoked row followed by a newer row of its family is `rotated`; other old revoked
   rows stay NULL, which counts as revoked on purpose.
+- `20260926160100_b2_challenge_single_use`: unique partial index `otp_codes (code_hash) WHERE purpose =
+  'challenge'` (spent challenge tokens).
 
 ## 7. Next.js apps (BFF — tokens never reach browser JavaScript)
 

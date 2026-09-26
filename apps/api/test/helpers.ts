@@ -116,6 +116,7 @@ export async function cleanup(db: PrismaClient): Promise<void> {
       OR: [
         { target: { endsWith: '@b2.test' } },
         { target: { in: [...phones] } },
+        { target: { in: userIds } },
         { requestIp: { in: [...ips] } },
       ],
     },

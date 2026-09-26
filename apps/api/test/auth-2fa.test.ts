@@ -151,6 +151,40 @@ describe.skipIf(!hasDb)('auth: two-factor and admin access', () => {
     expect(LoginResult.parse((await passwordLogin(api, email).expect(200)).body).status).toBe('ok');
   });
 
+  it('a challenge token completes one sign-in only, even when two requests race', async () => {
+    const email = uniqueEmail('once');
+    const login = await registerAndVerify(api, outbox, { audience: 'web', email });
+    const token = login.tokens.accessToken;
+    const { secret } = TwoFactorSetup.parse(
+      (await api.post('/auth/2fa/setup', {}, { token }).expect(200)).body,
+    );
+    const { backupCodes } = TwoFactorEnabled.parse(
+      (await api.post('/auth/2fa/enable', { code: totp(secret) }, { token }).expect(200)).body,
+    );
+    const [b0, b1, b2, b3] = backupCodes;
+
+    const ct = challengeTokenOf((await passwordLogin(api, email).expect(200)).body, 'mfa_required');
+    expectOk((await challenge(ct, b0 ?? '').expect(200)).body);
+    const again = await challenge(ct, b1 ?? '').expect(401);
+    expect(ErrorBody.parse(again.body).error.code).toBe('UNAUTHENTICATED');
+    // The refused attempt did not use up the backup code.
+    const next = challengeTokenOf(
+      (await passwordLogin(api, email).expect(200)).body,
+      'mfa_required',
+    );
+    await challenge(next, b1 ?? '').expect(200);
+
+    // Two parallel completions with one token and two valid codes: exactly one session.
+    const racing = challengeTokenOf(
+      (await passwordLogin(api, email).expect(200)).body,
+      'mfa_required',
+    );
+    const before = await db.session.count({ where: { userId: login.user.id } });
+    const results = await Promise.all([challenge(racing, b2 ?? ''), challenge(racing, b3 ?? '')]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 401]);
+    expect(await db.session.count({ where: { userId: login.user.id } })).toBe(before + 1);
+  });
+
   it('wrong second factors count as failed logins and lock the account', async () => {
     const email = uniqueEmail('totplock');
     const login = await registerAndVerify(api, outbox, { audience: 'web', email });
@@ -188,6 +222,9 @@ describe.skipIf(!hasDb)('auth: two-factor and admin access', () => {
     );
     expect(enabled.backupCodes).toHaveLength(10);
     const first = expectOk(enabled.login);
+    // The setup challenge token finished a sign-in, so it is spent.
+    const spent = await api.post('/auth/2fa/setup', { challengeToken: setupCt }).expect(401);
+    expect(ErrorBody.parse(spent.body).error.code).toBe('UNAUTHENTICATED');
     expect(claims(first.tokens.accessToken)).toMatchObject({
       aud: 'admin',
       role: 'admin',
