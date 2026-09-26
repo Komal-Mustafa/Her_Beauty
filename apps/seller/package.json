@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hb/auth": "workspace:*",
     "@hb/sdk": "workspace:*",
     "@hb/three": "workspace:*",
     "@hb/types": "workspace:*",

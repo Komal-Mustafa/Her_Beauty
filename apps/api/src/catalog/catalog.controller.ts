@@ -1,9 +1,12 @@
 import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
 import { Id, ProductQuery, Slug } from '@hb/types';
 import { z } from 'zod';
+import { Public } from '../auth/decorators';
 import { coerceQuery, parse } from '../common/validate';
 import { CatalogService } from './catalog.service';
 
+/** Public storefront reads (no account needed). */
+@Public()
 @Controller()
 export class CatalogController {
   constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}

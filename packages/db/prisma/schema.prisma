@@ -310,6 +310,9 @@ model User {
   email           String?    @unique
   /// E.164, e.g. +923001234567
   phone           String?    @unique
+  /// E.164 number given at sign-up next to an email: not an identifier until verified
+  /// (not unique, no codes, no sign-in; docs/b2-auth.md §3)
+  pendingPhone    String?    @map("pending_phone")
   /// Argon2id; null for OTP-only customers
   passwordHash    String?    @map("password_hash")
   /// CHECK length(full_name) <= 120 (migration SQL)
@@ -320,6 +323,8 @@ model User {
   phoneVerifiedAt DateTime?  @map("phone_verified_at") @db.Timestamptz(6)
   twofaSecretEnc  Bytes?     @map("twofa_secret_enc")
   twofaEnabledAt  DateTime?  @map("twofa_enabled_at") @db.Timestamptz(6)
+  /// last accepted TOTP time-step (replay protection, docs/b2-auth.md §4)
+  twofaLastStep   BigInt?    @map("twofa_last_step")
   failedLogins    Int        @default(0) @map("failed_logins")
   lockedUntil     DateTime?  @map("locked_until") @db.Timestamptz(6)
   lastLoginAt     DateTime?  @map("last_login_at") @db.Timestamptz(6)
@@ -328,6 +333,7 @@ model User {
   deletedAt       DateTime?  @map("deleted_at") @db.Timestamptz(6)
 
   sessions                   Session[]
+  twofaBackupCodes           TwofaBackupCode[]
   addresses                  Address[]
   ownedSellers               Seller[]               @relation("SellerOwner")
   reviewedSellers            Seller[]               @relation("SellerReviewer")
@@ -367,8 +373,16 @@ model Session {
   familyId         String    @map("family_id") @db.Uuid
   userAgent        String?   @map("user_agent")
   ip               String?   @db.Inet
+  /// web | seller | admin (CHECK in migration SQL)
+  audience         String    @default("web")
+  /// when 2FA was completed for this session family
+  mfaAt            DateTime? @map("mfa_at") @db.Timestamptz(6)
+  lastUsedAt       DateTime? @map("last_used_at") @db.Timestamptz(6)
   expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
   revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  /// rotated | logout | logout_all | device_revoked | password_reset | reuse | access_lost |
+  /// account_claimed (CHECK in migration SQL); only "rotated" rows trigger reuse detection
+  revokedReason    String?   @map("revoked_reason")
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -388,10 +402,27 @@ model OtpCode {
   attempts  Int       @default(0)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
   usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  /// requester IP, for the per-IP send limit (security.md §4)
+  requestIp String?   @map("request_ip") @db.Inet
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([target, purpose, createdAt(sort: Desc)])
+  @@index([requestIp, createdAt(sort: Desc)])
   @@map("otp_codes")
+}
+
+/// 2FA backup codes: 10 per user, single use, stored as HMAC (docs/b2-auth.md §4).
+model TwofaBackupCode {
+  id        String    @id @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @unique @map("code_hash")
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+  @@map("twofa_backup_codes")
 }
 
 /// Partial unique index one_default_address (user_id) WHERE is_default lives in migration SQL.

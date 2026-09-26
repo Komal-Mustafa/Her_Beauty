@@ -1,11 +1,14 @@
 import { Controller, Get, Inject, Query } from '@nestjs/common';
 import { AdSlotCode, Slug } from '@hb/types';
 import { z } from 'zod';
+import { Public } from '../auth/decorators';
 import { parse } from '../common/validate';
 import { AdsService } from './ads.service';
 
 const ServeQuery = z.object({ slot: AdSlotCode, category: Slug.optional() }).strict();
 
+/** Public storefront reads (no account needed). */
+@Public()
 @Controller()
 export class AdsController {
   constructor(@Inject(AdsService) private readonly ads: AdsService) {}

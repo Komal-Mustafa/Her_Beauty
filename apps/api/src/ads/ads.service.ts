@@ -76,15 +76,25 @@ export function toServedAd(c: CampaignRow, slot: AdSlotCode): ServedAd | null {
 export class AdsService {
   constructor(@Inject(PrismaService) private readonly db: PrismaService) {}
 
+  /**
+   * Reads that touch RLS tables (ad_subscriptions, ad_campaigns, ad_creatives, products) run
+   * with app.role = 'public_read', so they also work under a non-owner role (docs/b2-auth.md §5).
+   */
+  private publicRead<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    return this.db.withPlatformScope('public_read', fn);
+  }
+
   async packages(): Promise<AdPackage[]> {
-    const [rows, seats] = await Promise.all([
-      this.db.adPackage.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
-      this.db.adSubscription.groupBy({
-        by: ['packageId'],
-        where: { status: { in: ['active', 'past_due'] } },
-        _count: { _all: true },
-      }),
-    ]);
+    const [rows, seats] = await this.publicRead((tx) =>
+      Promise.all([
+        tx.adPackage.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
+        tx.adSubscription.groupBy({
+          by: ['packageId'],
+          where: { status: { in: ['active', 'past_due'] } },
+          _count: { _all: true },
+        }),
+      ]),
+    );
     const taken = new Map(seats.map((s) => [s.packageId, s._count._all]));
     return rows.map((p) => {
       const days = (p.slotDays ?? {}) as Record<string, unknown>;
@@ -113,20 +123,22 @@ export class AdsService {
    * Only live campaigns with an approved creative are served.
    */
   async serve(slot: AdSlotCode, categorySlug?: string): Promise<ServedAd[]> {
-    const bookings = await this.db.adSlotBooking.findMany({
-      where: {
-        day: todayUtc(),
-        slot: {
-          code: slot,
-          ...(slot === 'category_banner' && categorySlug
-            ? { category: { slug: categorySlug } }
-            : {}),
+    const bookings = await this.publicRead((tx) =>
+      tx.adSlotBooking.findMany({
+        where: {
+          day: todayUtc(),
+          slot: {
+            code: slot,
+            ...(slot === 'category_banner' && categorySlug
+              ? { category: { slug: categorySlug } }
+              : {}),
+          },
+          campaign: { status: 'live', seller: { status: 'approved', deletedAt: null } },
         },
-        campaign: { status: 'live', seller: { status: 'approved', deletedAt: null } },
-      },
-      orderBy: { position: 'asc' },
-      include: { campaign: { include: campaignInclude } },
-    });
+        orderBy: { position: 'asc' },
+        include: { campaign: { include: campaignInclude } },
+      }),
+    );
     return bookings
       .map((b) => toServedAd(b.campaign, slot))
       .filter((a): a is ServedAd => a !== null);
@@ -134,17 +146,19 @@ export class AdsService {
 
   async heroScenes(): Promise<HeroScene[]> {
     const now = new Date();
-    const rows = await this.db.cmsHeroScene.findMany({
-      where: {
-        isActive: true,
-        AND: [
-          { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
-          { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
-        ],
-      },
-      orderBy: { sortOrder: 'asc' },
-      include: { campaign: { include: campaignInclude } },
-    });
+    const rows = await this.publicRead((tx) =>
+      tx.cmsHeroScene.findMany({
+        where: {
+          isActive: true,
+          AND: [
+            { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+            { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+          ],
+        },
+        orderBy: { sortOrder: 'asc' },
+        include: { campaign: { include: campaignInclude } },
+      }),
+    );
     return rows.map((s) => ({
       id: s.id,
       sortOrder: s.sortOrder,
