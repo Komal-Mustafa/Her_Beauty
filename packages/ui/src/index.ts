@@ -15,3 +15,8 @@ export { TrustStrip } from './components/trust-strip';
 export { EmptyState } from './components/empty-state';
 export { Logo } from './components/logo';
 export { Reveal } from './components/reveal';
+export { PasswordInput } from './components/password-input';
+export { CodeInput } from './components/code-input';
+export { Tabs, type TabItem } from './components/tabs';
+export { Alert } from './components/alert';
+export { SubmitButton } from './components/submit-button';

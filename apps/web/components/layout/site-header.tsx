@@ -134,7 +134,14 @@ export function SiteHeader({ categories, nav }: SiteHeaderProps) {
           >
             <Heart aria-hidden className="h-5 w-5" />
           </Link>
-          <Link href="/account" aria-label="Account" className={cn(iconLink, 'hidden sm:grid')}>
+          {/* Static link: middleware sends logged-out visitors to /login?next=/account. No
+              prefetch, so a background request never has to refresh the session. */}
+          <Link
+            href="/account"
+            prefetch={false}
+            aria-label="Account"
+            className={cn(iconLink, 'hidden sm:grid')}
+          >
             <User aria-hidden className="h-5 w-5" />
           </Link>
           <Link href="/cart" aria-label="Cart" className={iconLink}>
