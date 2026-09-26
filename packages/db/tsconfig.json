@@ -1,0 +1,13 @@
+{
+  "extends": "@hb/config/tsconfig/library.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src",
+    "prisma/seed.ts",
+    "prisma/seed"
+  ]
+}
