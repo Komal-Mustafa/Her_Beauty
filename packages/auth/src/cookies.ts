@@ -1,9 +1,17 @@
 // Cookie names and options (docs/b2-auth.md §7). Edge-safe: shared by the server helpers and the
 // middleware entry.
-import type { TokenPair } from '@hb/types';
+import type { AuthAudience, TokenPair } from '@hb/types';
 import { isProduction } from './env';
 
 export type SameSite = 'lax' | 'strict';
+
+/**
+ * SameSite comes from the audience, never from app config (security.md §4, b2-auth §7):
+ * Strict for the admin console, Lax for the shop and the seller portal.
+ */
+export function sameSiteFor(audience: AuthAudience): SameSite {
+  return audience === 'admin' ? 'strict' : 'lax';
+}
 
 export type CookieOptions = {
   httpOnly: true;
@@ -24,26 +32,26 @@ export type CookieNames = {
   pending: string;
 };
 
-const BASE_NAMES: CookieNames = {
-  access: 'hb_at',
-  refresh: 'hb_rt',
-  mfa: 'hb_mfa',
-  pending: 'hb_pending',
-};
-
 /** 2FA challenge tokens live 5 minutes (b2-auth §3). */
 export const MFA_COOKIE_MAX_AGE_SEC = 5 * 60;
 /** Pending verification state for /verify and /reset-password. */
 export const PENDING_COOKIE_MAX_AGE_SEC = 15 * 60;
 
-/** `__Host-` prefix in production: Secure, path=/ and no Domain, so subdomains never share them. */
-export function cookieNames(production: boolean = isProduction()): CookieNames {
-  if (!production) return { ...BASE_NAMES };
+/**
+ * `hb_<audience>_at` etc. The audience keeps the three apps apart where they share a cookie jar
+ * (localhost ports in development). In production the `__Host-` prefix is added on top: Secure,
+ * path=/ and no Domain, so subdomains never share or overwrite them either.
+ */
+export function cookieNames(
+  audience: AuthAudience,
+  production: boolean = isProduction(),
+): CookieNames {
+  const base = `${production ? '__Host-' : ''}hb_${audience}`;
   return {
-    access: `__Host-${BASE_NAMES.access}`,
-    refresh: `__Host-${BASE_NAMES.refresh}`,
-    mfa: `__Host-${BASE_NAMES.mfa}`,
-    pending: `__Host-${BASE_NAMES.pending}`,
+    access: `${base}_at`,
+    refresh: `${base}_rt`,
+    mfa: `${base}_mfa`,
+    pending: `${base}_pending`,
   };
 }
 

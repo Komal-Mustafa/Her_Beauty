@@ -50,6 +50,16 @@ export type TwoFactorEnableState =
 export type ProfileState = { status: 'ok'; user: Me } | AuthError;
 export type DoneState = { status: 'ok' } | AuthError;
 
+/**
+ * The account/security "two-factor" panel, one server action for the whole enrolment:
+ * setup → scan + first code → backup codes (shown once) → done (null).
+ */
+export type TwoFactorPanelState =
+  | { step: 'scan'; secret: string; qrDataUrl: string; error?: AuthError }
+  | { step: 'codes'; backupCodes: string[] }
+  | { step: 'failed'; error: AuthError }
+  | null;
+
 /** Per-helper copy for field errors (zod messages are not user-facing). */
 export type FieldMessages = Record<string, string>;
 

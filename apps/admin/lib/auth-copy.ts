@@ -1,4 +1,4 @@
-import type { AuthError } from '@hb/auth';
+import { SECOND_FACTOR_CODE_MESSAGES, type AuthError } from '@hb/auth/client';
 import { MESSAGES } from './validation';
 
 // Admin wording on top of @hb/auth's shared copy: admins log in with a work email (no mobile
@@ -8,13 +8,6 @@ import { MESSAGES } from './validation';
 type Step = 'login' | 'challenge' | 'setup' | 'enable';
 
 export const TIMED_OUT = 'Your sign-in timed out. Log in again and we’ll ask for a fresh code.';
-
-const CODE_MESSAGES: Record<'challenge' | 'enable', string> = {
-  challenge:
-    'That code didn’t work. Enter the newest code from your authenticator app, or a backup code you haven’t used yet.',
-  enable:
-    'That code didn’t work. Enter the newest 6-digit code your authenticator app shows for Her Beauty.',
-};
 
 const SIGNED_OUT_CODES = new Set(['UNAUTHENTICATED', 'SESSION_REVOKED', 'INVALID_CREDENTIALS']);
 
@@ -40,7 +33,7 @@ export function adminError(error: AuthError, step: Step): AuthError {
     return out;
   }
   if (step !== 'setup' && error.code === 'INVALID_CODE') {
-    return withMessage(error, CODE_MESSAGES[step], 'code');
+    return withMessage(error, SECOND_FACTOR_CODE_MESSAGES[step], 'code');
   }
   if (step !== 'challenge' && SIGNED_OUT_CODES.has(error.code)) {
     return withMessage(error, TIMED_OUT);

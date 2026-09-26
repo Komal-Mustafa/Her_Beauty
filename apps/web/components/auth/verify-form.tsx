@@ -1,12 +1,10 @@
 'use client';
 
-import type { VerifyResultState } from '@hb/auth';
-import { Alert, CodeInput, Input, SubmitButton } from '@hb/ui';
+import type { VerifyResultState } from '@hb/auth/client';
+import { Alert, CodeInput, FormAlert, Input, SubmitButton, useFieldErrors } from '@hb/ui';
 import { useActionState } from 'react';
 import { verifyCodeAction } from '@/app/(auth)/actions';
 import { checks } from '@/lib/validation';
-import { FormAlert } from './form-alert';
-import { useFieldErrors } from './use-field-errors';
 
 /**
  * Step 1: the 6-digit code. If the number/email has no account yet, the API answers

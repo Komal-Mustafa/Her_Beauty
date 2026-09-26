@@ -19,3 +19,24 @@ export function apiBaseUrl(): string {
   }
   return DEV_API_BASE_URL;
 }
+
+export type ClientIpSettings = {
+  /** Header the edge proxy overwrites with the browser IP (e.g. `cf-connecting-ip`), lower-case. */
+  header?: string;
+  /** Proxies in front of Next.js that append to X-Forwarded-For (1 = the right-most entry). */
+  proxyHops: number;
+};
+
+/**
+ * Where the browser IP comes from (docs/b2-auth.md §7). `CLIENT_IP_HEADER` names a header the
+ * edge overwrites; otherwise `TRUSTED_PROXY_HOPS` (default 1) counts the proxies that append to
+ * X-Forwarded-For, like the API's TRUST_PROXY. Anything to their left was written by the browser.
+ */
+export function clientIpSettings(): ClientIpSettings {
+  const header = process.env.CLIENT_IP_HEADER?.trim().toLowerCase();
+  const hops = Number(process.env.TRUSTED_PROXY_HOPS);
+  return {
+    ...(header ? { header } : {}),
+    proxyHops: Number.isInteger(hops) && hops >= 1 ? hops : 1,
+  };
+}

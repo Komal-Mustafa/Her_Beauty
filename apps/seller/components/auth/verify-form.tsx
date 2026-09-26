@@ -1,15 +1,16 @@
 'use client';
 
-import type { CodeSentState, VerifyResultState } from '@hb/auth';
-import { Alert, CodeInput, Input, SubmitButton } from '@hb/ui';
+import type { CodeSentState, VerifyResultState } from '@hb/auth/client';
+import { Alert, CodeInput, FormAlert, Input, SubmitButton, useFieldErrors } from '@hb/ui';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { sendVerifyCodeAction, verifyCodeAction } from '@/app/(auth)/actions';
 import { checks } from '@/lib/validation';
-import { FormAlert } from './form-alert';
-import { useFieldErrors } from './use-field-errors';
 
-/** The 6-digit code that confirms a new seller account; a right code logs the seller in. */
+/**
+ * The 6-digit code that confirms a new seller account, or a mobile number confirmed from Security.
+ * A right code logs the seller in.
+ */
 export function VerifyForm() {
   const [state, action] = useActionState<VerifyResultState | null, FormData>(
     verifyCodeAction,

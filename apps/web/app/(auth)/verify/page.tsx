@@ -1,7 +1,8 @@
+import { ResendCode } from '@hb/auth/client';
 import { Alert, Button } from '@hb/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ResendCode } from '@/components/auth/resend-code';
+import { resendCodeAction } from '@/app/(auth)/actions';
 import { VerifyForm } from '@/components/auth/verify-form';
 import { auth } from '@/lib/auth';
 
@@ -48,7 +49,9 @@ export default async function VerifyPage() {
       <div className="mt-8">
         <VerifyForm needsName={pending.needsName} />
       </div>
-      {!pending.needsName && <ResendCode resendInSec={pending.resendInSec} />}
+      {!pending.needsName && (
+        <ResendCode action={resendCodeAction} resendInSec={pending.resendInSec} />
+      )}
       <p className="mt-6 text-sm">
         <Link
           href={changeHref}

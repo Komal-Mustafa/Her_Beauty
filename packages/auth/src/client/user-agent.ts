@@ -1,4 +1,5 @@
-// "Chrome on Android"-style labels for the sessions list. Best effort; unknown agents fall back.
+// "Chrome on Android"-style labels and Pakistan-time dates for the sessions list. Best effort;
+// unknown agents fall back. Pure: usable from server and client components.
 
 const BROWSERS: Array<[RegExp, string]> = [
   [/EdgA?\//, 'Edge'],

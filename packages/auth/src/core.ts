@@ -30,11 +30,13 @@ import {
   cookieOptions,
   MFA_COOKIE_MAX_AGE_SEC,
   PENDING_COOKIE_MAX_AGE_SEC,
+  sameSiteFor,
   writeTokenCookies,
   type CookieNames,
   type CookieWriter,
   type SameSite,
 } from './cookies';
+import { FIELD_MESSAGES, RESEND_COOLDOWN_SEC, SECOND_FACTOR_CODE_MESSAGES } from './copy';
 import { ApiRequestError } from './errors';
 import {
   captchaToken,
@@ -84,9 +86,8 @@ import {
 } from './state-cookies';
 
 export type AuthConfig = {
+  /** Also decides the cookie names and SameSite (Strict for admin, Lax otherwise; b2-auth §7). */
   audience: AuthAudience;
-  /** 'lax' for web/seller, 'strict' for admin (docs/b2-auth.md §7). */
-  sameSite: SameSite;
   /** Where requireSession() sends logged-out visitors. Default "/login". */
   loginPath?: string;
   /** Default landing page after login when no safe `next` was given. Default "/". */
@@ -110,23 +111,9 @@ export type AuthDeps = {
 
 export type ApiFetchInit = { method?: HttpMethod; body?: unknown };
 
-/** Seconds before "Resend code" works again. */
-export const RESEND_COOLDOWN_SEC = 60;
+export { RESEND_COOLDOWN_SEC };
 
-const FIELDS = {
-  identifier: 'Enter the email or mobile number you signed up with.',
-  password: 'Enter your password.',
-  newPassword: 'Use 8 to 128 characters.',
-  fullName: 'Enter your name, at least 2 letters.',
-  email: 'Enter an email like name@example.com.',
-  phone: 'Enter a mobile number like 0300 1234567.',
-  code: 'Enter the 6-digit code.',
-  storeName: 'Enter a store name, at least 2 characters.',
-  sellerType: 'Choose Vendor or Manufacturer.',
-  id: 'Refresh the page and try again.',
-} as const satisfies FieldMessages;
-
-const SECOND_FACTOR_FIELD = 'Enter the 6-digit code from your app, or a backup code.';
+const FIELDS = FIELD_MESSAGES satisfies FieldMessages;
 
 const SessionList: Schema<SessionInfo[]> = {
   parse(input) {
@@ -153,11 +140,12 @@ export type PendingView = {
 export type MfaView = { kind: MfaState['kind']; next: string };
 
 export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
-  const { audience, sameSite } = config;
+  const { audience } = config;
+  const sameSite: SameSite = sameSiteFor(audience);
   const loginPath = config.loginPath ?? '/login';
   const homePath = config.homePath ?? '/';
   const now = deps.now ?? Date.now;
-  const names = (): CookieNames => cookieNames();
+  const names = (): CookieNames => cookieNames(audience);
 
   // ---------- plumbing ----------
 
@@ -213,8 +201,14 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
   }
 
   /**
-   * Authenticated API call: Bearer from the access cookie, one refresh + retry on 401, response
-   * parsed with `schema`. Throws ApiRequestError (with the API error code) on failure.
+   * Authenticated API call: Bearer from the access cookie, one refresh + retry when the API says
+   * the access token is unusable, response parsed with `schema`. Throws ApiRequestError (with the
+   * API error code) on failure.
+   *
+   * Only `UNAUTHENTICATED` (missing, invalid or expired access token) refreshes. Other 401s are
+   * answers about the request itself: INVALID_CREDENTIALS (a wrong password on /auth/2fa/disable)
+   * must not be sent twice, since each try counts toward the lockout, and SESSION_REVOKED means the
+   * refresh token is dead too, so presenting it would only look like token theft.
    */
   async function apiFetch<T>(path: string, schema: Schema<T>, init: ApiFetchInit = {}): Promise<T> {
     const jar = await deps.cookies();
@@ -224,7 +218,7 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
     try {
       return await call(path, schema, { ...init, bearer: access });
     } catch (error) {
-      if (!(error instanceof ApiRequestError) || error.status !== 401) throw error;
+      if (!(error instanceof ApiRequestError) || error.code !== 'UNAUTHENTICATED') throw error;
       access = await refresh(jar);
       if (!access) throw error;
       return call(path, schema, { ...init, bearer: access });
@@ -345,6 +339,22 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
     return { status: result.status, next };
   }
 
+  /**
+   * Stores a token pair the API issued outside these helpers, e.g. POST /seller/application, which
+   * rotates the session so the new tokens carry the seller context. The old refresh token is
+   * already revoked (presenting it again would look like token theft and end every session), so
+   * the new pair replaces the cookies at once. A leftover 2FA step or code log-in is finished
+   * business; a pending verify or reset code (made while signed in) is kept.
+   * Server actions and route handlers only: cookies are read-only in server components.
+   */
+  async function adoptTokens(tokens: TokenPair): Promise<void> {
+    const jar = await deps.cookies();
+    const n = names();
+    writeTokenCookies(jar, n, tokens, sameSite, now());
+    clearIfPresent(jar, n.mfa);
+    if (readPending(jar)?.purpose === 'login') clearCookie(jar, n.pending, sameSite);
+  }
+
   /** Runs an API step and maps ApiRequestError to an AuthError with the given context. */
   async function attempt<R>(ctx: ErrorContext, step: () => Promise<R>): Promise<R | AuthError> {
     try {
@@ -461,6 +471,30 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
     });
   }
 
+  /**
+   * Sends a "verify" code to the signed-in user's own email or mobile number (`channel`), then
+   * /verify finishes it. The address comes from the session, never from the form.
+   */
+  async function sendContactVerification(input: HelperInput): Promise<CodeSentState> {
+    const data = readInput(input);
+    const channel: OtpChannel = data.channel === 'email' ? 'email' : 'sms';
+    let me: Me | null;
+    try {
+      me = await getSession();
+    } catch (error) {
+      return toAuthError(error);
+    }
+    if (!me) return makeError('UNAUTHENTICATED');
+    const target = channel === 'email' ? me.email : me.phone;
+    if (!target) {
+      const what = channel === 'email' ? 'email address' : 'mobile number';
+      return makeError('VALIDATION_FAILED', {
+        messages: { VALIDATION_FAILED: `There’s no ${what} on your account to confirm yet.` },
+      });
+    }
+    return sendOtp({ channel, target, purpose: 'verify', next: data.next });
+  }
+
   /** Sends a fresh code for whatever /verify or /reset-password is waiting on. */
   async function resendCode(): Promise<CodeSentState> {
     const jar = await deps.cookies();
@@ -533,14 +567,15 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
     }
   }
 
-  /** Finishes a password login with a TOTP or backup code (challenge token from hb_mfa). */
+  /** Finishes a password login with a TOTP or backup code (challenge token from hb_<audience>_mfa). */
   async function challenge2fa(input: HelperInput): Promise<LoginResultState> {
     const data = readInput(input);
     const jar = await deps.cookies();
     const mfa = readMfa(jar);
     const ctx: ErrorContext = {
-      fields: { ...FIELDS, code: SECOND_FACTOR_FIELD },
+      fields: { ...FIELDS, code: FIELD_MESSAGES.secondFactor },
       codeField: 'code',
+      messages: { INVALID_CODE: SECOND_FACTOR_CODE_MESSAGES.challenge },
     };
     if (!mfa || mfa.kind !== 'mfa') return makeError('MFA_EXPIRED', ctx);
     const parsed = TwoFactorChallengeRequest.safeParse({
@@ -590,7 +625,11 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
     const data = readInput(input);
     const jar = await deps.cookies();
     const mfa = readMfa(jar);
-    const ctx: ErrorContext = { fields: FIELDS, codeField: 'code' };
+    const ctx: ErrorContext = {
+      fields: FIELDS,
+      codeField: 'code',
+      messages: { INVALID_CODE: SECOND_FACTOR_CODE_MESSAGES.enable },
+    };
     const setupToken = mfa?.kind === 'mfa_setup' ? mfa.token : undefined;
     const parsed = TwoFactorEnableRequest.safeParse({
       challengeToken: setupToken,
@@ -620,10 +659,11 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
   async function disable2fa(input: HelperInput): Promise<DoneState> {
     const data = readInput(input);
     const ctx: ErrorContext = {
-      fields: { ...FIELDS, code: SECOND_FACTOR_FIELD },
+      fields: { ...FIELDS, code: FIELD_MESSAGES.secondFactor },
       codeField: 'code',
       messages: {
         INVALID_CREDENTIALS: 'Your password didn’t match. Check it and try again.',
+        INVALID_CODE: SECOND_FACTOR_CODE_MESSAGES.challenge,
       },
     };
     const parsed = TwoFactorDisableRequest.safeParse({ password: data.password, code: data.code });
@@ -760,9 +800,11 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
     apiFetch,
     getPending,
     getMfaChallenge,
+    adoptTokens,
     login,
     register,
     sendOtp,
+    sendContactVerification,
     resendCode,
     verifyOtp,
     challenge2fa,

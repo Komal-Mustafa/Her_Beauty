@@ -1,95 +1,42 @@
 import { ApiRequestError } from '@hb/auth';
+import { ContactRow, SessionList, SignOutEverywhere, TwoFactorPanel } from '@hb/auth/client';
 import type { Me, SessionInfo } from '@hb/types';
-import { Alert, Badge, Card, Container, SectionHeading, SubmitButton } from '@hb/ui';
+import { Card, Container, SectionHeading, SubmitButton } from '@hb/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ProfileForm } from '@/components/account/profile-form';
-import { RevokeSessionButton, SignOutEverywhere } from '@/components/account/session-controls';
-import { TwoFactorPanel } from '@/components/account/two-factor-panel';
-import { VerifyContactButton } from '@/components/account/verify-contact-button';
 import { auth } from '@/lib/auth';
-import { describeUserAgent, formatDateTime } from '@/lib/user-agent';
-import { logoutAction } from './actions';
+import {
+  disableTwoFactorAction,
+  logoutAction,
+  logoutAllAction,
+  revokeSessionAction,
+  sendVerificationAction,
+  twoFactorAction,
+} from './actions';
 
 export const metadata: Metadata = {
   title: 'Your account',
   robots: { index: false, follow: false },
 };
 
-const APP_NAMES: Record<SessionInfo['audience'], string> = {
-  web: 'Shop',
-  seller: 'Seller portal',
-  admin: 'Admin',
-};
-
 function CardHeading({ children }: { children: ReactNode }) {
   return <h2 className="mb-5 font-display text-[22px] font-medium text-ink-900">{children}</h2>;
 }
 
-function ContactRow({
-  label,
-  value,
-  verified,
-  channel,
-}: {
-  label: string;
-  value: string | null;
-  verified: boolean;
-  channel: 'sms' | 'email';
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-4">
-      <div className="min-w-0">
-        <p className="text-sm text-ink-500">{label}</p>
-        <p className="break-words font-medium text-ink-900">{value ?? 'Not added'}</p>
-        {value && (
-          <Badge kind={verified ? 'success' : 'warning'} className="mt-1">
-            {verified ? 'Verified' : 'Not verified'}
-          </Badge>
-        )}
-      </div>
-      {value && !verified && (
-        <VerifyContactButton
-          channel={channel}
-          target={value}
-          label={`Verify ${label.toLowerCase()}`}
-        />
-      )}
-    </div>
-  );
-}
-
-function SessionsList({ sessions }: { sessions: SessionInfo[] | null }) {
-  if (!sessions) {
-    return (
-      <Alert tone="warning">
-        We couldn’t load your devices just now. Refresh the page to try again.
-      </Alert>
-    );
+/**
+ * The shop's code log-in is by mobile only, so it is offered only to accounts with a confirmed
+ * mobile number (an email-only account cannot use it).
+ */
+function passwordSummary(me: Me): string {
+  const codeLogin = me.phone !== null && me.phoneVerified;
+  if (me.hasPassword) {
+    return codeLogin ? 'Set. You can also log in with a code sent to your mobile.' : 'Set.';
   }
-  return (
-    <ul className="divide-y divide-ink-200">
-      {sessions.map((s) => {
-        const device = describeUserAgent(s.userAgent);
-        return (
-          <li key={s.id} className="flex items-start justify-between gap-4 py-4">
-            <div className="min-w-0">
-              <p className="flex flex-wrap items-center gap-2 font-medium text-ink-900">
-                {device}
-                {s.current && <Badge kind="success">This device</Badge>}
-              </p>
-              <p className="text-sm text-ink-500">
-                {APP_NAMES[s.audience]} · Last active {formatDateTime(s.lastUsedAt ?? s.createdAt)}
-                {s.ip ? ` · ${s.ip}` : ''}
-              </p>
-            </div>
-            {!s.current && <RevokeSessionButton id={s.id} device={device} />}
-          </li>
-        );
-      })}
-    </ul>
-  );
+  return codeLogin
+    ? 'Not set. You log in with a code sent to your mobile.'
+    : 'Not set. Set one so you can log in with your email.';
 }
 
 async function loadSessions(): Promise<SessionInfo[] | null> {
@@ -117,8 +64,9 @@ export default async function AccountPage() {
         title={`Hello, ${firstName(me)}`}
         description="Your details, how you sign in, and where you’re signed in."
       />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-5 md:p-8">
+      {/* grid-cols-1 + min-w-0: a long email must wrap, not widen the page (360 px). */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="min-w-0 p-5 md:p-8">
           <CardHeading>Profile</CardHeading>
           <ProfileForm fullName={me.fullName} />
           <div className="mt-6 divide-y divide-ink-200 border-t border-ink-200">
@@ -127,26 +75,24 @@ export default async function AccountPage() {
               value={me.email}
               verified={me.emailVerified}
               channel="email"
+              verifyAction={sendVerificationAction}
             />
             <ContactRow
               label="Mobile number"
               value={me.phone}
               verified={me.phoneVerified}
               channel="sms"
+              verifyAction={sendVerificationAction}
             />
           </div>
         </Card>
 
-        <Card className="p-5 md:p-8">
+        <Card className="min-w-0 p-5 md:p-8">
           <CardHeading>Sign-in and security</CardHeading>
           <div className="flex items-start justify-between gap-4 border-b border-ink-200 pb-5">
-            <div>
+            <div className="min-w-0">
               <p className="font-medium text-ink-900">Password</p>
-              <p className="text-sm text-ink-500">
-                {me.hasPassword
-                  ? 'Set. You can also log in with a code sent to your mobile.'
-                  : 'Not set. You log in with a code sent to your mobile or email.'}
-              </p>
+              <p className="text-sm text-ink-500">{passwordSummary(me)}</p>
             </div>
             <Link
               href="/forgot-password"
@@ -156,15 +102,21 @@ export default async function AccountPage() {
             </Link>
           </div>
           <div className="pt-5">
-            <TwoFactorPanel enabled={me.twoFactorEnabled} hasPassword={me.hasPassword} />
+            <TwoFactorPanel
+              enabled={me.twoFactorEnabled}
+              hasPassword={me.hasPassword}
+              enrolAction={twoFactorAction}
+              disableAction={disableTwoFactorAction}
+              description="Add a code from an authenticator app when you log in with your password, so a stolen password alone can’t open your account."
+            />
           </div>
         </Card>
 
-        <Card className="p-5 md:p-8 lg:col-span-2">
+        <Card className="min-w-0 p-5 md:p-8 lg:col-span-2">
           <CardHeading>Where you’re signed in</CardHeading>
-          <SessionsList sessions={sessions} />
+          <SessionList sessions={sessions} revokeAction={revokeSessionAction} />
           <div className="mt-6 flex flex-col gap-4 border-t border-ink-200 pt-6 sm:flex-row sm:items-start sm:justify-between">
-            <SignOutEverywhere />
+            <SignOutEverywhere action={logoutAllAction} />
             <form action={logoutAction}>
               <SubmitButton variant="quiet" size="sm" pendingLabel="Logging out…">
                 Log out

@@ -1,10 +1,12 @@
+import { TwoFactorForm } from '@hb/auth/client';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { twoFactorAction } from '@/app/login/actions';
 import { AuthCard, StartOver } from '@/components/auth/auth-card';
-import { TwoFactorForm } from '@/components/auth/two-factor-form';
 import { auth } from '@/lib/auth';
 import { TIMED_OUT } from '@/lib/auth-copy';
+import { MESSAGES } from '@/lib/validation';
 
 export const metadata: Metadata = { title: 'Two-step verification' };
 
@@ -39,7 +41,13 @@ export default async function TwoFactorPage({
           : 'Open your authenticator app and enter the 6-digit code for Her Beauty.'}
       </p>
       <div className="mt-6">
-        <TwoFactorForm key={useBackup ? 'backup' : 'totp'} backup={useBackup} />
+        <TwoFactorForm
+          key={useBackup ? 'backup' : 'totp'}
+          action={twoFactorAction}
+          backup={useBackup}
+          submitLabel="Verify and continue"
+          messages={{ code: MESSAGES.code, backupCode: MESSAGES.backupCode }}
+        />
       </div>
       <div className="mt-4 flex flex-col items-center text-sm">
         <Link

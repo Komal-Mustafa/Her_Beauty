@@ -1,21 +1,21 @@
 'use client';
 
-import type { CodeSentState, DoneState } from '@hb/auth';
-import { CodeInput, Input, PasswordInput, SubmitButton } from '@hb/ui';
+import { CodeInput, FormAlert, Input, PasswordInput, SubmitButton, useFieldErrors } from '@hb/ui';
 import { useActionState } from 'react';
-import { forgotPasswordAction, resetPasswordAction } from '@/app/(auth)/actions';
-import { checks } from '@/lib/validation';
+import type { CodeSentState, DoneState } from '../results';
 import { Captcha } from './captcha';
-import { FormAlert } from './form-alert';
-import { useFieldErrors } from './use-field-errors';
+import { authChecks } from './checks';
+import type { FormAction } from './types';
 
-export function ForgotPasswordForm() {
-  const [state, action] = useActionState<CodeSentState | null, FormData>(
-    forgotPasswordAction,
-    null,
-  );
+/** Step 1 of a reset: the email or mobile number. `action` wraps `auth.forgotPassword()`. */
+export function ForgotPasswordForm({
+  action: forgotAction,
+}: {
+  action: FormAction<CodeSentState>;
+}) {
+  const [state, action] = useActionState<CodeSentState | null, FormData>(forgotAction, null);
   const error = state?.status === 'error' ? state : null;
-  const v = useFieldErrors({ identifier: checks.identifier }, error);
+  const v = useFieldErrors({ identifier: authChecks.identifier }, error);
   return (
     <form action={action} onSubmit={v.onSubmit} noValidate className="space-y-5">
       <FormAlert state={state} />
@@ -37,10 +37,11 @@ export function ForgotPasswordForm() {
   );
 }
 
-export function ResetPasswordForm() {
-  const [state, action] = useActionState<DoneState | null, FormData>(resetPasswordAction, null);
+/** Step 2: the code and a new password. `action` wraps `auth.resetPassword()`. */
+export function ResetPasswordForm({ action: resetAction }: { action: FormAction<DoneState> }) {
+  const [state, action] = useActionState<DoneState | null, FormData>(resetAction, null);
   const error = state?.status === 'error' ? state : null;
-  const v = useFieldErrors({ code: checks.code, newPassword: checks.newPassword }, error);
+  const v = useFieldErrors({ code: authChecks.code, newPassword: authChecks.newPassword }, error);
   return (
     <form action={action} onSubmit={v.onSubmit} noValidate className="space-y-5">
       <FormAlert state={state} />

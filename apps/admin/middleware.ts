@@ -2,11 +2,10 @@ import { createAuthMiddleware } from '@hb/auth/middleware';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // docs/b2-auth.md §7: every admin page needs a session, except the sign-in pages under /login.
-// Refreshes an expired access cookie (hb_rt) or redirects to /login?next=… . The API still
+// Refreshes an expired access cookie (hb_admin_rt) or redirects to /login?next=… . The API still
 // verifies every token (audience "admin", role, 2FA) on every call.
 const requireSession = createAuthMiddleware({
   audience: 'admin',
-  sameSite: 'strict',
   protectedPrefixes: ['/'],
   loginPath: '/login',
 });

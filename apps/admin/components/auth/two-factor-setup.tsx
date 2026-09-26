@@ -1,15 +1,13 @@
 'use client';
 
-import type { AuthError } from '@hb/auth';
-import { Alert, Button, CodeInput, SubmitButton } from '@hb/ui';
+import { BackupCodeList, type AuthError } from '@hb/auth/client';
+import { Alert, Button, CodeInput, FormAlert, SubmitButton, useFieldErrors } from '@hb/ui';
 import Link from 'next/link';
 import { useActionState, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { twoFactorSetupAction, type SetupState } from '@/app/login/actions';
 import { TIMED_OUT } from '@/lib/auth-copy';
 import { checks } from '@/lib/validation';
 import { StartOver } from './auth-card';
-import { FormAlert } from './form-alert';
-import { useFieldErrors } from './use-field-errors';
 
 type Action = (form: FormData) => void;
 
@@ -28,9 +26,10 @@ function groupKey(secret: string): string {
  *
  * Enabling 2FA also signs the admin in, and setting those cookies makes Next re-render the page
  * without the setup challenge (`ready` turns false). The page keeps rendering this component in
- * the same place, so the backup codes held in its state survive that re-render.
+ * the same place, so the backup codes held in its state survive that re-render. A reload does
+ * lose them (the browser asks first): `alreadyOn` then says 2FA is on instead of "timed out".
  */
-export function TwoFactorSetup({ ready }: { ready: boolean }) {
+export function TwoFactorSetup({ ready, alreadyOn }: { ready: boolean; alreadyOn: boolean }) {
   const [state, action] = useActionState<SetupState, FormData>(twoFactorSetupAction, null);
 
   if (state?.step === 'codes') {
@@ -48,7 +47,7 @@ export function TwoFactorSetup({ ready }: { ready: boolean }) {
       />
     );
   }
-  if (!ready) return <StartOver message={TIMED_OUT} />;
+  if (!ready) return alreadyOn ? <AlreadyOn /> : <StartOver message={TIMED_OUT} />;
   if (state?.step === 'failed' && !RETRYABLE.has(state.error.code)) {
     return <StartOver message={state.error.message} />;
   }
@@ -71,6 +70,25 @@ function StartOverLink() {
         Start over
       </Link>
     </p>
+  );
+}
+
+/** Signed in with 2FA on, but the one-time backup codes are gone (the page was reloaded). */
+function AlreadyOn() {
+  return (
+    <>
+      <Heading>Two-step verification is on</Heading>
+      <p className="mt-2 text-sm text-ink-500">
+        You’re logged in, and every log-in now asks for a code from your authenticator app.
+      </p>
+      <p className="mt-3 text-sm text-ink-500">
+        Backup codes are shown only once, right after setup, so we can’t show them here again. Your
+        authenticator app keeps working for every log-in.
+      </p>
+      <Button asChild block className="mt-6">
+        <Link href="/">Continue to the console</Link>
+      </Button>
+    </>
   );
 }
 
@@ -163,35 +181,15 @@ function BackupCodes({
   unsaved: boolean;
   action: Action;
 }) {
-  const [copy, setCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [checked, setChecked] = useState(false);
   const [triedEmpty, setTriedEmpty] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const checkboxId = useId();
   const errorId = `${checkboxId}-error`;
-  const text = `Her Beauty Admin backup codes (each works once)\n\n${codes.join('\n')}\n`;
   const showError = !checked && (triedEmpty || unsaved);
 
   // The codes replace the form the person just used: move focus so screen readers announce them.
   useEffect(() => heading.current?.focus(), []);
-
-  async function copyCodes() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopy('copied');
-    } catch {
-      setCopy('failed');
-    }
-  }
-
-  function downloadCodes() {
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'her-beauty-admin-backup-codes.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
 
   // The checkbox is `required`, so the browser blocks the submit; we show our own message.
   function onInvalid(e: FormEvent<HTMLInputElement>) {
@@ -216,26 +214,12 @@ function BackupCodes({
         If you lose your phone, each code lets you log in once. Keep them somewhere safe, like a
         password manager. We won’t show them again.
       </p>
-      <ul
-        aria-label="Backup codes"
-        className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 rounded-btn border border-ink-200 bg-blush-50 p-4 text-sm font-medium tabular-nums tracking-wider text-ink-900"
-      >
-        {codes.map((code) => (
-          <li key={code}>{code}</li>
-        ))}
-      </ul>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button type="button" variant="secondary" size="sm" onClick={copyCodes}>
-          Copy codes
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={downloadCodes}>
-          Download codes
-        </Button>
-        <p role="status" className="text-sm text-ink-500">
-          {copy === 'copied' && 'Copied.'}
-          {copy === 'failed' && 'Couldn’t copy. Select the codes and copy them instead.'}
-        </p>
-      </div>
+      <BackupCodeList
+        codes={codes}
+        fileTitle="Her Beauty Admin backup codes"
+        fileName="her-beauty-admin-backup-codes.txt"
+        className="mt-5"
+      />
       <form action={action} className="mt-6 space-y-5">
         <input type="hidden" name="intent" value="finish" />
         <div>

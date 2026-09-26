@@ -190,20 +190,35 @@ Follow-up migrations (B2 fixes):
 ## 7. Next.js apps (BFF — tokens never reach browser JavaScript)
 
 Shared package **`@hb/auth`** (`packages/auth`, server-only, depends on `next` as a peer):
-- `createAuthConfig({ audience, cookieSameSite })` per app.
-- Cookies: access `hb_at` (maxAge = access expiry) and refresh `hb_rt` (maxAge = refresh expiry), both
-  `httpOnly`, `path=/`, `SameSite=Lax` (`Strict` for admin), `Secure` + `__Host-` name prefix when
-  `NODE_ENV === 'production'`.
+- `createAuth({ audience, loginPath, homePath })` per app; the audience also fixes SameSite (`Strict` for
+  admin, `Lax` for web and seller).
+- Cookie names carry the audience, so the three apps never share or overwrite each other's cookies (they all
+  run on `localhost` in dev): access `hb_<audience>_at` (maxAge = access expiry), refresh `hb_<audience>_rt`
+  (maxAge = refresh expiry), plus `hb_<audience>_mfa` (2FA challenge) and `hb_<audience>_pending` (code in
+  flight). All `httpOnly`, `path=/`, `Secure` + `__Host-` name prefix when `NODE_ENV === 'production'`
+  (`__Host-hb_web_at`, …).
 - `authApi` — typed server-side client for `/v1/auth/*`, `/v1/me` (uses `NEXT_PUBLIC_API_BASE_URL` or
-  `API_INTERNAL_URL`), forwarding the browser IP as `X-Forwarded-For` and the user agent.
+  `API_INTERNAL_URL`), forwarding the browser IP as `X-Forwarded-For` and the user agent. The browser IP is
+  never the leftmost `X-Forwarded-For` value (the visitor can set that): it is the value of `CLIENT_IP_HEADER`
+  when set (e.g. `cf-connecting-ip`, which the edge overwrites), else the entry `TRUSTED_PROXY_HOPS` (default 1)
+  places from the right. Anything that is not an IP address is not forwarded. The Next servers must only be
+  reachable through those proxies.
+- `apiFetch` refreshes and retries only on 401 `UNAUTHENTICATED`; `INVALID_CREDENTIALS` (wrong current
+  password) and `SESSION_REVOKED` are returned as they are.
 - `getSession()` for server components: reads cookies, returns `Me | null` (calls `GET /me`; on 401 tries one
   refresh and retries).
 - Server actions (forms, progressive enhancement, `useActionState`): login, register, verify, otp send, 2FA
   challenge / setup / enable, forgot / reset password, logout, logout-all. Next.js server actions already reject
   cross-origin posts (Origin vs Host), which is our CSRF protection for cookie-auth state changes.
 - `middleware.ts` per app: protected paths without a valid-looking access cookie ⇒ try refresh (if `hb_rt`) and
-  set new cookies, else redirect to `/login?next=<path>` (only same-origin relative `next` values are honoured).
+  set new cookies, else redirect to `/login?next=<path>` (only same-origin relative `next` values are honoured,
+  compared after the browser's dot-segment normalisation, so `/.//evil.test` is rejected).
   The middleware does **not** trust the JWT — the API verifies every call.
+- **`@hb/auth/client`** — the client-safe entry with the auth UI the apps share (2FA form and panel, backup
+  codes, password reset forms, resend code, captcha, contact rows with "Verify", session list and controls) and
+  the field checks and copy the server also uses. Components take the app's server actions as props and never
+  import the server-only entry. Generic form pieces (`useFieldErrors`, `FormAlert`, `fieldRule`) live in
+  `@hb/ui`.
 
 Pages (brand UI from `@hb/ui`; visible labels, blur-first validation, errors that never blame the user,
 verb-first buttons, keyboard accessible, 360 px mobile):
@@ -214,9 +229,11 @@ verb-first buttons, keyboard accessible, 360 px mobile):
 - **seller**: `/login` (+ `/login/2fa`), `/register` (choose **Vendor** or **Manufacturer**, store name, name,
   email, mobile, password ⇒ `/verify`), `/forgot-password`, `/reset-password`, `/dashboard` (application
   status card for draft/submitted sellers, "Start your application" for users without a seller, store name,
-  log out), `/security` (2FA, sessions). `/` ⇒ `/dashboard` or `/login`.
+  log out), `/security` (email and mobile with "Verify", so a confirmed mobile number can log in; 2FA,
+  sessions). `/` ⇒ `/dashboard` or `/login`.
 - **admin**: `/login` ⇒ `/login/2fa` (code) or `/login/2fa/setup` (QR code SVG via `qrcode`, manual key, first
-  code, then backup codes shown once with "I saved these codes") ⇒ `/` overview (counts from
+  code, then backup codes shown once with "I saved these codes"; the page asks before a reload, and after one
+  it says 2FA is on instead of "timed out") ⇒ `/` overview (counts from
   `/admin/overview`), log out. Every admin page requires a session.
 
 ## 8. Seed (dev only)

@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { createAuthCore, type Auth, type AuthConfig, type CookieJar } from './core';
 
-/** One instance per app, e.g. `export const auth = createAuth({ audience: 'web', sameSite: 'lax' })`. */
+/** One instance per app, e.g. `export const auth = createAuth({ audience: 'web' })`. */
 export function createAuth(config: AuthConfig): Auth {
   return createAuthCore(config, {
     cookies: async (): Promise<CookieJar> => cookies(),
@@ -31,10 +31,12 @@ export {
 export {
   cookieNames,
   cookieOptions,
+  sameSiteFor,
   type CookieNames,
   type CookieOptions,
   type SameSite,
 } from './cookies';
+export { FIELD_MESSAGES, SECOND_FACTOR_CODE_MESSAGES } from './copy';
 export {
   ApiRequestError,
   friendlyMessage,
@@ -42,7 +44,7 @@ export {
   type AuthResultCode,
   type LocalErrorCode,
 } from './errors';
-export { IgnoreBody, type Schema } from './http';
+export { clientIp, IgnoreBody, isIpAddress, type Schema } from './http';
 export { qrSvgDataUrl } from './qr';
 export {
   isAuthError,
@@ -56,6 +58,7 @@ export {
   type ProfileState,
   type RegisterResultState,
   type TwoFactorEnableState,
+  type TwoFactorPanelState,
   type TwoFactorSetupState,
   type VerifyResultState,
 } from './results';

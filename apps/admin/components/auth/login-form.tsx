@@ -1,13 +1,10 @@
 'use client';
 
-import type { LoginResultState } from '@hb/auth';
-import { Input, PasswordInput, SubmitButton } from '@hb/ui';
+import { Captcha, type LoginResultState } from '@hb/auth/client';
+import { FormAlert, Input, PasswordInput, SubmitButton, useFieldErrors } from '@hb/ui';
 import { useActionState } from 'react';
 import { loginAction } from '@/app/login/actions';
 import { checks } from '@/lib/validation';
-import { Captcha } from './captcha';
-import { FormAlert } from './form-alert';
-import { useFieldErrors } from './use-field-errors';
 
 /** Step 1 of the admin sign-in: work email + password. The API then always asks for 2FA. */
 export function LoginForm({ next }: { next: string }) {

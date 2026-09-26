@@ -4,7 +4,6 @@ import type { Me } from '@hb/types';
 /** Customer-site auth (docs/b2-auth.md §7): SameSite=Lax cookies, 30-day sessions. */
 export const auth = createAuth({
   audience: 'web',
-  sameSite: 'lax',
   loginPath: '/login',
   homePath: '/account',
 });

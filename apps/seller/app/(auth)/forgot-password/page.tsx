@@ -1,6 +1,7 @@
+import { ForgotPasswordForm } from '@hb/auth/client';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ForgotPasswordForm } from '@/components/auth/password-reset-forms';
+import { forgotPasswordAction } from '@/app/(auth)/actions';
 
 export const metadata: Metadata = { title: 'Reset your password' };
 
@@ -14,7 +15,7 @@ export default function SellerForgotPasswordPage() {
         Enter the email or mobile number on your account and we’ll send you a 6-digit code.
       </p>
       <div className="mt-8">
-        <ForgotPasswordForm />
+        <ForgotPasswordForm action={forgotPasswordAction} />
       </div>
       <p className="mt-8 text-center text-sm text-ink-500">
         Remembered it?{' '}

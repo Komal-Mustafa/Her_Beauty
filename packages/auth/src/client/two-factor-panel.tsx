@@ -1,66 +1,37 @@
 'use client';
 
-import type { DoneState } from '@hb/auth';
-import { Alert, Badge, Button, CodeInput, Input, PasswordInput, SubmitButton } from '@hb/ui';
-import Link from 'next/link';
-import { useActionState, useState } from 'react';
 import {
-  disableTwoFactorAction,
-  twoFactorAction,
-  type TwoFactorPanelState,
-} from '@/app/(portal)/actions';
-import { FormAlert } from '@/components/auth/form-alert';
-import { useFieldErrors } from '@/components/auth/use-field-errors';
-import { checks } from '@/lib/validation';
+  Alert,
+  Badge,
+  Button,
+  CodeInput,
+  FormAlert,
+  Input,
+  PasswordInput,
+  SubmitButton,
+  useFieldErrors,
+} from '@hb/ui';
+import Link from 'next/link';
+import { useActionState } from 'react';
+import type { DoneState, TwoFactorPanelState } from '../results';
+import { BackupCodeList } from './backup-code-list';
+import { authChecks } from './checks';
+import type { FormAction } from './types';
+
+type Action = (form: FormData) => void;
 
 function groupKey(secret: string): string {
   return secret.replace(/(.{4})/g, '$1 ').trim();
 }
 
-function BackupCodes({ codes, onDone }: { codes: string[]; onDone: (form: FormData) => void }) {
-  const [copied, setCopied] = useState(false);
-  const text = `Her Beauty backup codes (each works once)\n\n${codes.join('\n')}\n`;
-
-  function download() {
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'her-beauty-backup-codes.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  }
-
+function BackupCodes({ codes, onDone }: { codes: string[]; onDone: Action }) {
   return (
     <div className="space-y-4">
       <Alert tone="success" title="Two-factor is on">
         Save these backup codes somewhere safe. Each one lets you log in once if you lose your
         phone. We won’t show them again.
       </Alert>
-      <ul
-        aria-label="Backup codes"
-        className="grid grid-cols-2 gap-2 rounded-btn border border-gold-500 bg-blush-50 p-4 text-sm font-medium tabular-nums tracking-wider text-ink-900"
-      >
-        {codes.map((code) => (
-          <li key={code}>{code}</li>
-        ))}
-      </ul>
-      <div className="flex flex-wrap gap-3">
-        <Button type="button" variant="secondary" size="sm" className="min-h-11" onClick={download}>
-          Download codes
-        </Button>
-        <Button type="button" variant="secondary" size="sm" className="min-h-11" onClick={copy}>
-          {copied ? 'Copied' : 'Copy codes'}
-        </Button>
-      </div>
+      <BackupCodeList codes={codes} />
       <form action={onDone}>
         <input type="hidden" name="intent" value="done" />
         <SubmitButton size="sm" className="min-h-11">
@@ -76,9 +47,9 @@ function ScanStep({
   action,
 }: {
   state: Extract<TwoFactorPanelState, { step: 'scan' }>;
-  action: (form: FormData) => void;
+  action: Action;
 }) {
-  const v = useFieldErrors({ code: checks.code }, state.error ?? null);
+  const v = useFieldErrors({ code: authChecks.code }, state.error ?? null);
   return (
     <div className="space-y-5">
       <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-500">
@@ -89,7 +60,7 @@ function ScanStep({
         <li>Enter the 6-digit code the app shows.</li>
       </ol>
       <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-        {/* eslint-disable-next-line @next/next/no-img-element -- server-made data URL, no optimisation needed */}
+        {/* A server-made SVG data URL: nothing for next/image to optimise. */}
         <img
           src={state.qrDataUrl}
           alt="QR code for your authenticator app"
@@ -121,10 +92,16 @@ function ScanStep({
   );
 }
 
-function DisableTwoFactor({ hasPassword }: { hasPassword: boolean }) {
-  const [state, action] = useActionState<DoneState | null, FormData>(disableTwoFactorAction, null);
+function DisableTwoFactor({
+  hasPassword,
+  action: disableAction,
+}: {
+  hasPassword: boolean;
+  action: FormAction<DoneState>;
+}) {
+  const [state, action] = useActionState<DoneState | null, FormData>(disableAction, null);
   const error = state?.status === 'error' ? state : null;
-  const v = useFieldErrors({ password: checks.password, code: checks.secondFactor }, error);
+  const v = useFieldErrors({ password: authChecks.password, code: authChecks.secondFactor }, error);
   if (!hasPassword) {
     return (
       <p className="text-sm text-ink-500">
@@ -174,17 +151,24 @@ function DisableTwoFactor({ hasPassword }: { hasPassword: boolean }) {
 }
 
 /**
- * 2FA on/off: QR + manual key + first code, then backup codes shown once. Optional for sellers
- * now; required before payouts, bank or courier changes in later phases (b2-auth §1).
+ * 2FA on/off for a signed-in user: QR + manual key + first code, then backup codes shown once.
+ * `enrolAction` runs the steps (auth.setup2fa → auth.enable2fa); `disableAction` wraps
+ * auth.disable2fa. `description` says why to turn it on, in the app's own words.
  */
 export function TwoFactorPanel({
   enabled,
   hasPassword,
+  enrolAction,
+  disableAction,
+  description,
 }: {
   enabled: boolean;
   hasPassword: boolean;
+  enrolAction: FormAction<TwoFactorPanelState>;
+  disableAction: FormAction<DoneState>;
+  description: string;
 }) {
-  const [state, action] = useActionState<TwoFactorPanelState, FormData>(twoFactorAction, null);
+  const [state, action] = useActionState<TwoFactorPanelState, FormData>(enrolAction, null);
 
   let body;
   if (state?.step === 'codes') {
@@ -192,16 +176,12 @@ export function TwoFactorPanel({
   } else if (state?.step === 'scan') {
     body = <ScanStep state={state} action={action} />;
   } else if (enabled) {
-    body = <DisableTwoFactor hasPassword={hasPassword} />;
+    body = <DisableTwoFactor hasPassword={hasPassword} action={disableAction} />;
   } else {
     body = (
       <form action={action} className="space-y-4">
         {state?.step === 'failed' && <FormAlert state={state.error} />}
-        <p className="text-sm text-ink-500">
-          Add a code from an authenticator app when you log in with your password, so a stolen
-          password alone can’t open your store. You’ll need it before you can request payouts or
-          change bank or courier details.
-        </p>
+        <p className="text-sm text-ink-500">{description}</p>
         <input type="hidden" name="intent" value="setup" />
         <SubmitButton variant="secondary" size="sm" className="min-h-11" pendingLabel="Preparing…">
           Turn on two-factor

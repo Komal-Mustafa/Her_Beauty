@@ -1,14 +1,11 @@
 'use client';
 
-import type { LoginResultState } from '@hb/auth';
-import { Input, PasswordInput, SubmitButton } from '@hb/ui';
+import { Captcha, type LoginResultState } from '@hb/auth/client';
+import { FormAlert, Input, PasswordInput, SubmitButton, useFieldErrors } from '@hb/ui';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { loginAction } from '@/app/(auth)/actions';
 import { checks } from '@/lib/validation';
-import { Captcha } from './captcha';
-import { FormAlert } from './form-alert';
-import { useFieldErrors } from './use-field-errors';
 
 /** Email or mobile number + password. 2FA, when on, continues at /login/2fa. */
 export function LoginForm({ next }: { next: string }) {
@@ -25,6 +22,7 @@ export function LoginForm({ next }: { next: string }) {
         autoComplete="username"
         autoCapitalize="none"
         spellCheck={false}
+        hint="Your mobile number works here once you’ve confirmed it in Security."
         defaultValue={error?.values?.identifier}
         error={v.errorFor('identifier')}
         {...v.field}

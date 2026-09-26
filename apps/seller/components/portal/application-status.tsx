@@ -9,7 +9,7 @@ import {
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
-import { formatDateTime } from '@/lib/user-agent';
+import { formatDateTime } from '@hb/auth/client';
 import { LogoutButton } from './logout-button';
 
 export type SellerSummary = {

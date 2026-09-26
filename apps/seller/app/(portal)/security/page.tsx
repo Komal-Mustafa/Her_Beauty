@@ -1,57 +1,24 @@
 import { ApiRequestError } from '@hb/auth';
+import { ContactRow, SessionList, SignOutEverywhere, TwoFactorPanel } from '@hb/auth/client';
 import type { SessionInfo } from '@hb/types';
-import { Alert, Badge, Card, SectionHeading } from '@hb/ui';
+import { Card, SectionHeading } from '@hb/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import {
+  disableTwoFactorAction,
+  logoutAllAction,
+  revokeSessionAction,
+  sendVerificationAction,
+  twoFactorAction,
+} from '@/app/(portal)/actions';
 import { LogoutButton } from '@/components/portal/logout-button';
-import { RevokeSessionButton, SignOutEverywhere } from '@/components/portal/session-controls';
-import { TwoFactorPanel } from '@/components/portal/two-factor-panel';
 import { auth } from '@/lib/auth';
-import { describeUserAgent, formatDateTime } from '@/lib/user-agent';
 
 export const metadata: Metadata = { title: 'Security' };
 
-const APP_NAMES: Record<SessionInfo['audience'], string> = {
-  web: 'Shop',
-  seller: 'Seller portal',
-  admin: 'Admin',
-};
-
 function CardHeading({ children }: { children: ReactNode }) {
   return <h2 className="mb-5 font-display text-[22px] font-medium text-ink-900">{children}</h2>;
-}
-
-function SessionsList({ sessions }: { sessions: SessionInfo[] | null }) {
-  if (!sessions) {
-    return (
-      <Alert tone="warning">
-        We couldn’t load your devices just now. Refresh the page to try again.
-      </Alert>
-    );
-  }
-  return (
-    <ul className="divide-y divide-ink-200">
-      {sessions.map((s) => {
-        const device = describeUserAgent(s.userAgent);
-        return (
-          <li key={s.id} className="flex items-start justify-between gap-4 py-4">
-            <div className="min-w-0">
-              <p className="flex flex-wrap items-center gap-2 font-medium text-ink-900">
-                {device}
-                {s.current && <Badge kind="success">This device</Badge>}
-              </p>
-              <p className="break-words text-sm text-ink-500">
-                {APP_NAMES[s.audience]} · Last active {formatDateTime(s.lastUsedAt ?? s.createdAt)}
-                {s.ip ? ` · ${s.ip}` : ''}
-              </p>
-            </div>
-            {!s.current && <RevokeSessionButton id={s.id} device={device} />}
-          </li>
-        );
-      })}
-    </ul>
-  );
 }
 
 async function loadSessions(): Promise<SessionInfo[] | null> {
@@ -75,10 +42,30 @@ export default async function SecurityPage() {
         title="Security"
         description="How you log in, and where you’re logged in. Your seller login also works on the Her Beauty shop."
       />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-5 md:p-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="min-w-0 p-5 md:p-8">
           <CardHeading>Log-in and two-factor</CardHeading>
-          <div className="flex items-start justify-between gap-4 border-b border-ink-200 pb-5">
+          {/* Seller sign-up confirms the email only; the mobile number works for log-in once it
+              is confirmed here (b2-auth §1: email or phone + password). */}
+          <div className="divide-y divide-ink-200 border-b border-ink-200">
+            <ContactRow
+              label="Email"
+              value={me.email}
+              verified={me.emailVerified}
+              channel="email"
+              verifyAction={sendVerificationAction}
+              hint="Confirm it to log in with your email."
+            />
+            <ContactRow
+              label="Mobile number"
+              value={me.phone}
+              verified={me.phoneVerified}
+              channel="sms"
+              verifyAction={sendVerificationAction}
+              hint="Confirm it to log in with your mobile number too."
+            />
+          </div>
+          <div className="flex items-start justify-between gap-4 border-b border-ink-200 py-5">
             <div className="min-w-0">
               <p className="font-medium text-ink-900">Password</p>
               <p className="text-sm text-ink-500">
@@ -96,15 +83,21 @@ export default async function SecurityPage() {
             </Link>
           </div>
           <div className="pt-5">
-            <TwoFactorPanel enabled={me.twoFactorEnabled} hasPassword={me.hasPassword} />
+            <TwoFactorPanel
+              enabled={me.twoFactorEnabled}
+              hasPassword={me.hasPassword}
+              enrolAction={twoFactorAction}
+              disableAction={disableTwoFactorAction}
+              description="Add a code from an authenticator app when you log in with your password, so a stolen password alone can’t open your store. You’ll need it before you can request payouts or change bank or courier details."
+            />
           </div>
         </Card>
 
-        <Card className="p-5 md:p-8">
+        <Card className="min-w-0 p-5 md:p-8">
           <CardHeading>Where you’re logged in</CardHeading>
-          <SessionsList sessions={sessions} />
+          <SessionList sessions={sessions} revokeAction={revokeSessionAction} />
           <div className="mt-6 flex flex-col gap-4 border-t border-ink-200 pt-6 sm:flex-row sm:items-start sm:justify-between">
-            <SignOutEverywhere />
+            <SignOutEverywhere action={logoutAllAction} />
             <LogoutButton />
           </div>
         </Card>
