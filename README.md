@@ -28,6 +28,6 @@ pnpm --filter @hb/web dev  # just the storefront
 
 Checks (same as CI): `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
 
-Behind a TLS-inspecting proxy, set `NODE_EXTRA_CA_CERTS` so `next/font` can download Google Fonts at build time.
+Fonts are self-hosted in `packages/config/fonts` (OFL-1.1), so builds need no network access.
 
 Add `?tier=high|mid|low` to any storefront URL to force a 3D device tier while testing.
