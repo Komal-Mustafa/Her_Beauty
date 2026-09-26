@@ -30,7 +30,8 @@
     "TURNSTILE_SECRET_KEY",
     "HIBP_ENABLED",
     "API_INTERNAL_URL",
-    "SEED_DEMO_PASSWORD"
+    "SEED_DEMO_PASSWORD",
+    "SEED_ADMIN_EMAIL"
   ],
   "globalEnv": ["NEXT_PUBLIC_*"]
 }

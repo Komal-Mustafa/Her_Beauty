@@ -176,7 +176,7 @@ verb-first buttons, keyboard accessible, 360 px mobile):
 
 `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `REFRESH_TOKEN_PEPPER`, `OTP_PEPPER`, `ENCRYPTION_KEY`, `TRUST_PROXY`,
 `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `HIBP_ENABLED`, `API_INTERNAL_URL`,
-`SEED_DEMO_PASSWORD`. Peppers and the encryption key: required in production; in dev/test a fixed,
+`SEED_DEMO_PASSWORD`, `SEED_ADMIN_EMAIL`. Peppers and the encryption key: required in production; in dev/test a fixed,
 clearly-fake value from `.env.example` or the test setup.
 
 ## 10. Out of scope for B2
