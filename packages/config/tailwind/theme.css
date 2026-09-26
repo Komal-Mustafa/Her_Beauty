@@ -1,0 +1,213 @@
+/*
+ * Her Beauty design tokens — source: docs/04-ui-ux-design.md §2–§7.
+ * Tailwind 4 CSS-first theme. The default Tailwind palette is removed on purpose so
+ * components can only use brand tokens (rules.md §7: no random hex codes).
+ *
+ * Usage in an app's globals.css:
+ *   @import 'tailwindcss';
+ *   @import '@hb/config/tailwind/theme.css';
+ *   @source '../../../packages/ui/src';
+ */
+
+@theme {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  /* §2.1 core */
+  --color-white: #ffffff;
+  --color-blush-50: #fff5f9;
+  --color-pink-100: #fce4ef;
+  --color-pink-200: #f8bbd9;
+  --color-pink-400: #e75a9b;
+  --color-pink-600: #c2185b;
+  --color-pink-700: #ad1457;
+  --color-gold-300: #e9d18a;
+  --color-gold-500: #d4af37;
+  --color-gold-600: #b8872e;
+  --color-gold-800: #8a6420;
+  --color-ink-200: #e6dde1;
+  --color-ink-500: #6b5560;
+  --color-ink-900: #2b1a22;
+
+  /* §2.2 status */
+  --color-success: #1e8a5a;
+  --color-warning: #b7791f;
+  --color-danger: #c62839;
+  --color-info: #3f6fb5;
+
+  /* §2.4 dark sections */
+  --color-night-900: #1e0f16;
+  --color-night-800: #2a1620;
+  --color-night-pink: #f48fb1;
+
+  /* §3 typography — CSS variables are set by next/font in each app layout */
+  --font-display: var(--font-playfair), 'Playfair Display', Georgia, serif;
+  --font-accent: var(--font-cormorant), 'Cormorant Garamond', Georgia, serif;
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+
+  /* §4 shape */
+  --radius-btn: 12px;
+  --radius-card: 20px;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 8px 30px rgb(194 24 91 / 0.08);
+  --shadow-lift: 0 16px 40px rgb(194 24 91 / 0.14);
+  --shadow-gold: 0 0 0 1px rgb(212 175 55 / 0.6);
+
+  /* §4 breakpoints: 360 · 768 · 1024 · 1280 · 1536 */
+  --breakpoint-xs: 22.5rem;
+  --breakpoint-sm: 48rem;
+  --breakpoint-md: 64rem;
+  --breakpoint-lg: 80rem;
+  --breakpoint-xl: 96rem;
+
+  /* §7 motion */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  --default-transition-duration: 250ms;
+
+  --animate-shimmer: hb-shimmer 1.2s var(--ease-soft) 1;
+  --animate-skeleton: hb-skeleton 1.6s ease-in-out infinite;
+  --animate-pulse-soft: hb-pulse 2s ease-in-out infinite;
+  --animate-rise: hb-rise 450ms var(--ease-soft) both;
+  --animate-fade: hb-fade 250ms var(--ease-soft) both;
+
+  @keyframes hb-shimmer {
+    from {
+      transform: translateX(-120%);
+    }
+    to {
+      transform: translateX(120%);
+    }
+  }
+  @keyframes hb-skeleton {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+  @keyframes hb-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.12);
+      opacity: 0.7;
+    }
+  }
+  @keyframes hb-rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes hb-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/* §7 durations as custom utilities */
+@utility duration-fast {
+  transition-duration: 150ms;
+}
+@utility duration-base {
+  transition-duration: 250ms;
+}
+@utility duration-slow {
+  transition-duration: 450ms;
+}
+@utility duration-cinema {
+  transition-duration: 1000ms;
+}
+
+/* §2.3 gradients */
+@utility bg-grad-pink {
+  background-image: linear-gradient(135deg, #fff5f9 0%, #fce4ef 45%, #f8bbd9 100%);
+}
+@utility bg-grad-gold {
+  background-image: linear-gradient(120deg, #b8872e 0%, #e9d18a 45%, #d4af37 60%, #b8872e 100%);
+}
+@utility bg-grad-rose {
+  background-image: linear-gradient(135deg, #c2185b 0%, #e75a9b 100%);
+}
+@utility bg-shine {
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.65) 50%,
+    transparent 70%
+  );
+}
+@utility text-grad-rose {
+  background-image: linear-gradient(135deg, #c2185b 0%, #e75a9b 100%);
+  background-clip: text;
+  color: transparent;
+}
+
+/* §3 eyebrow */
+@utility eyebrow {
+  font-family: var(--font-accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.75rem;
+  @media (width >= 48rem) {
+    font-size: 0.875rem;
+  }
+}
+
+@layer base {
+  html {
+    color: var(--color-ink-900);
+    background: var(--color-white);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    line-height: 1.6;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    line-height: 1.15;
+  }
+  ::selection {
+    background: var(--color-pink-100);
+    color: var(--color-pink-700);
+  }
+
+  /* §10 focus ring pink-400, 2px, offset 2 */
+  :focus-visible {
+    outline: 2px solid var(--color-pink-400);
+    outline-offset: 2px;
+  }
+
+  /* §7 reduced motion: opacity only, no autoplay-style loops */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

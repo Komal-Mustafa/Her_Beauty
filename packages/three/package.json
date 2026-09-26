@@ -1,0 +1,25 @@
+{
+  "name": "@hb/three",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "detect-gpu": "5.0.70"
+  },
+  "peerDependencies": { "react": "^19" },
+  "devDependencies": {
+    "@hb/config": "workspace:*",
+    "@types/react": "19.3.0",
+    "eslint": "9.39.5",
+    "react": "19.3.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}
