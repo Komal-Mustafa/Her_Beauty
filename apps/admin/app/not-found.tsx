@@ -7,15 +7,17 @@ export default function NotFound() {
       id="main"
       className="flex min-h-dvh flex-col items-center justify-center bg-blush-50 px-4"
     >
-      <Link href="/" aria-label="Her Beauty home" className="mb-4">
+      <Link href="/" prefetch={false} aria-label="Admin console overview" className="mb-4">
         <Logo />
       </Link>
       <EmptyState
         title="We couldn’t find that page"
-        body="It may have moved, or it’s still being built. Let’s get you back to the shop."
+        body="It may have moved, or it’s still being built."
         action={
           <Button asChild>
-            <Link href="/">Go to the homepage</Link>
+            <Link href="/" prefetch={false}>
+              Go to the overview
+            </Link>
           </Button>
         }
       />
