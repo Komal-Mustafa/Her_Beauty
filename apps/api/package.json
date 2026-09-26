@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@hb/config": "workspace:*",
+    "@hb/sdk": "workspace:*",
     "@nestjs/testing": "11.2.6",
     "@types/express": "5.0.6",
     "@types/node": "22.20.4",

@@ -14,8 +14,10 @@
 - **P1 Setup — done (PR open).** Monorepo, brand tokens, fonts, base UI kit, mock data + API client, storefront layout, seller/admin shells, CI.
 - **P2 3D foundation — done (PR open).** `@hb/three/3d`: tiered canvas, studio lighting, petals + gold dust, procedural lipstick/compact/perfume/cream jar/pedestal, `<Model>` (glb with procedural fallback), `<ProductViewer>`. Playground at `/dev/3d` (dev only).
 - **P3 Cinematic hero — done (PR open).** Home hero is a 4-scene scroll film (logo draw → lipstick + compact → story + orbit → paid hero ad on pedestal). `heroState()` in `@hb/three` maps scroll to scene state; `HeroScene` in `@hb/three/3d`; DOM layers + GSAP in `apps/web/components/home/cinematic-hero.tsx`. Static `HeroFallback` is the LCP and the whole hero on low tier / reduced motion.
-- Next: **P4 home sections + sidebar ads**.
-- Full phase list P1–P11: docs/frontend-plan.md §9. Backend track (NestJS API) follows P11.
+- **B1 Backend foundation — done (PR open).** `packages/db`: Prisma schema for all 55 tables in 05-database-schema.md, one init migration with CHECKs, partial indexes and RLS; seed builds the demo catalogue from the storefront fixtures. `apps/api`: NestJS read API for categories, brands, products (filters, sort, cursor), product detail, reviews, stores, ads serving, hero scenes, ad packages, plans. Storefront switches with `NEXT_PUBLIC_API_MODE=http`.
+- Next: B2 auth (OTP, sessions, 2FA, RBAC) or P4 home sections + sidebar ads.
+- Full phase list P1–P11: docs/frontend-plan.md §9. Backend phases B1… run alongside.
+- Real product photos: storefront still uses placeholder SVGs. Unsplash/Pexels are blocked by the environment's network policy; need client photos or the hosts allowlisted.
 
 ## Decisions log
 | Date | Decision | Why |
@@ -32,6 +34,13 @@
 | 2026-09-26 | Brand gold = spec `#D4AF37` (logo art is rose-gold) | Default until client confirms |
 | 2026-09-26 | `motion` package used for Framer Motion | Same library, current package name |
 | 2026-09-26 | Next.js 15.5 (not 16) | TRD specifies Next 15 |
+| 2026-09-26 | Backend started before P4 (client asked "make backend") | Storefront can move to real data early; API contract = `@hb/types` |
+| 2026-09-26 | API runs on tsx (esbuild), legacy decorators, explicit `@Inject(Class)` everywhere | No `emitDecoratorMetadata` under esbuild; no build step needed |
+| 2026-09-26 | RLS reads `NULLIF(current_setting('app.seller_id', true), '')::uuid` | Unset setting is `''` after a reset; plain cast would error. API must connect as non-owner role in staging/prod |
+| 2026-09-26 | Media key `procedural:<kind>` = 3D model with no .glb; keys starting `/` or `http` returned as-is, others prefixed with `MEDIA_BASE_URL` | Same procedural fallback as the frontend; R2/CDN later |
+| 2026-09-26 | UUIDv7 made in app code, monotonic per process | Sort by id = insertion order (variants keep the seller's shade order) |
+| 2026-09-26 | Storefront hides products/ads/stores of sellers not `approved` or soft-deleted | Suspending a seller must take their listings down at once |
+| 2026-09-26 | Seed orders/reviews have no payments or ledger postings | Demo history only; seed refuses to run with NODE_ENV=production |
 
 ## Open [CONFIRM] items
 - Real logo SVG (placeholder monogram in `packages/ui/src/components/logo.tsx`); logo ring text reads "HER BEAUTY IN".

@@ -22,7 +22,15 @@ const MAX_SCAN = 2000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const LIVE = { status: 'live', deletedAt: null } satisfies Prisma.ProductWhereInput;
+/** Only approved, non-deleted sellers are visible on the storefront. */
+const LIVE_SELLER = { status: 'approved', deletedAt: null } satisfies Prisma.SellerWhereInput;
+
+/** Storefront-visible products: live, not deleted, and sold by a visible seller. */
+const LIVE = {
+  status: 'live',
+  deletedAt: null,
+  seller: LIVE_SELLER,
+} satisfies Prisma.ProductWhereInput;
 
 /** Opaque cursor so clients never depend on its shape. */
 const encodeCursor = (offset: number) => Buffer.from(`o:${offset}`).toString('base64url');
@@ -104,6 +112,7 @@ export class CatalogService {
     if (q.brand?.length) where.brand = { slug: { in: q.brand } };
     if (q.seller || q.sellerType) {
       where.seller = {
+        ...LIVE_SELLER,
         ...(q.seller ? { slug: q.seller } : {}),
         ...(q.sellerType ? { type: q.sellerType } : {}),
       };
@@ -121,7 +130,7 @@ export class CatalogService {
     const rows = await this.db.product.findMany({
       where,
       include: productInclude,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: MAX_SCAN,
     });
     let list = await this.hydrate(rows);
@@ -161,10 +170,9 @@ export class CatalogService {
 
   async reviewsByProductId(productId: string) {
     if (!UUID.test(productId)) return [];
-    const product = { id: productId };
     const rows = await this.db.review.findMany({
-      where: { productId: product.id, status: 'published' },
-      orderBy: { createdAt: 'desc' },
+      where: { productId, status: 'published' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 50,
       include: { customer: { select: { fullName: true } } },
     });
@@ -173,7 +181,7 @@ export class CatalogService {
 
   private async storesWhere(where: Prisma.SellerWhereInput) {
     const sellers = await this.db.seller.findMany({
-      where: { ...where, status: 'approved', deletedAt: null },
+      where: { ...where, ...LIVE_SELLER },
       select: sellerSelect,
       orderBy: { storeName: 'asc' },
     });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiRequestError, createHttpApi } from './http-api';
+import type { ApiRequestError } from './http-api';
+import { createHttpApi } from './http-api';
 
 function fakeFetch(status: number, body: unknown) {
   return vi.fn(async (_url: string) => new Response(JSON.stringify(body), { status }));

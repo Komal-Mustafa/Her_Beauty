@@ -29,7 +29,7 @@ export type SellerRow = Prisma.SellerGetPayload<{ select: typeof sellerSelect }>
 export const productInclude = {
   brand: true,
   seller: { select: sellerSelect },
-  variants: { where: { isActive: true }, orderBy: { price: 'asc' } },
+  variants: { where: { isActive: true }, orderBy: [{ price: 'asc' }, { id: 'asc' }] },
   media: { where: { status: 'ready' }, orderBy: { sortOrder: 'asc' } },
 } satisfies Prisma.ProductInclude;
 
@@ -123,7 +123,8 @@ export function toProduct(p: ProductRow, sellerRating: number, sponsored: boolea
           },
         ],
     price: cheapest ? money(cheapest.price) : 0,
-    compareAtPrice: cheapest?.compareAtPrice != null ? money(cheapest.compareAtPrice) : null,
+    compareAtPrice:
+      cheapest && cheapest.compareAtPrice !== null ? money(cheapest.compareAtPrice) : null,
     currency: cheapest?.currency === 'USD' ? 'USD' : 'PKR',
     shades: p.variants
       .filter((v) => v.shadeName && v.shadeHex)
@@ -148,7 +149,7 @@ export function toProduct(p: ProductRow, sellerRating: number, sponsored: boolea
       shadeHex: v.shadeHex,
       sizeLabel: v.sizeLabel,
       price: money(v.price),
-      compareAtPrice: v.compareAtPrice != null ? money(v.compareAtPrice) : null,
+      compareAtPrice: v.compareAtPrice !== null ? money(v.compareAtPrice) : null,
       currency: v.currency === 'USD' ? 'USD' : 'PKR',
       stock: v.stock,
     })),

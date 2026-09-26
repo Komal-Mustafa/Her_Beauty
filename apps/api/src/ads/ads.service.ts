@@ -20,7 +20,7 @@ const campaignInclude = {
           },
           variants: {
             where: { isActive: true, shadeHex: { not: null } },
-            orderBy: { price: 'asc' },
+            orderBy: [{ price: 'asc' }, { id: 'asc' }],
             take: 1,
             select: { shadeHex: true },
           },
@@ -62,7 +62,10 @@ export function toServedAd(c: CampaignRow, slot: AdSlotCode): ServedAd | null {
     media: {
       kind: creative.mediaType,
       url: mediaUrl(creative.fileKey),
-      posterUrl: product?.media[0] ? mediaUrl(product.media[0].fileKey) : null,
+      posterUrl:
+        creative.mediaType !== 'image' && product?.media[0]
+          ? mediaUrl(product.media[0].fileKey)
+          : null,
       model3dKind: kind,
       shadeHex: product?.variants[0]?.shadeHex ?? null,
     },
@@ -119,7 +122,7 @@ export class AdsService {
             ? { category: { slug: categorySlug } }
             : {}),
         },
-        campaign: { status: 'live' },
+        campaign: { status: 'live', seller: { status: 'approved', deletedAt: null } },
       },
       orderBy: { position: 'asc' },
       include: { campaign: { include: campaignInclude } },
