@@ -8,6 +8,11 @@ export type PlatformRole = 'admin' | 'support' | 'finance' | 'system';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  constructor() {
+    // "minimal": errors never echo query arguments (password hashes, codes) into the logs.
+    super({ errorFormat: 'minimal' });
+  }
+
   async onModuleInit() {
     await this.$connect();
   }
