@@ -160,7 +160,10 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async revokeSession(@Param('id') id: string, @CurrentAuth() auth: AuthContext) {
     const sessionId = z.uuid().safeParse(id);
-    if (!sessionId.success || !(await this.sessions.revokeOwn(auth.userId, sessionId.data))) {
+    const revoked =
+      sessionId.success &&
+      (await this.sessions.revokeOwn(auth.userId, sessionId.data, 'device_revoked'));
+    if (!revoked) {
       throw notFound('Session');
     }
   }

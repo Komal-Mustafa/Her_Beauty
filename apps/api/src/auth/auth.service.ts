@@ -346,12 +346,13 @@ export class AuthService {
 
   async refresh(refreshToken: string, client: ClientContext): Promise<TokenPair> {
     const result = await this.sessions.rotate(refreshToken, client);
-    if (result.kind === 'reuse') throw sessionRevoked();
+    if (result.kind === 'reuse' || result.kind === 'revoked') throw sessionRevoked();
+    // unknown, expired, or superseded by a concurrent refresh (nothing else is revoked).
     if (result.kind !== 'ok')
       throw unauthenticated('Your session has ended. Please sign in again.');
     const user = await this.users.findActiveById(result.session.userId);
     if (!user || !audienceAllows(result.session.audience, user.role)) {
-      await this.sessions.revokeOwn(result.session.userId, result.session.id);
+      await this.sessions.revokeOwn(result.session.userId, result.session.id, 'access_lost');
       throw sessionRevoked();
     }
     return this.signIn.tokenPair(result.session, result.refreshToken, user.role);
@@ -362,7 +363,7 @@ export class AuthService {
   }
 
   async logoutAll(auth: AuthContext, client: ClientContext): Promise<void> {
-    const revoked = await this.sessions.revokeAll(auth.userId);
+    const revoked = await this.sessions.revokeAll(auth.userId, 'logout_all');
     await this.audit.record({
       action: 'auth.logout_all',
       actorId: auth.userId,
@@ -406,7 +407,7 @@ export class AuthService {
           : { phoneVerifiedAt: user.phoneVerifiedAt ?? now }),
       },
     });
-    const revoked = await this.sessions.revokeAll(user.id);
+    const revoked = await this.sessions.revokeAll(user.id, 'password_reset');
     await this.audit.record({
       action: 'auth.password_reset',
       actorId: user.id,

@@ -25,10 +25,23 @@ Refresh lifetime is **absolute from login**: rotating a refresh token keeps the 
 - **Every authenticated request** verifies the JWT **and** checks the session row (`revoked_at IS NULL`,
   `expires_at > now()`), so logout and "log out all devices" take effect immediately.
 - **Refresh token**: 32 random bytes, base64url. Stored as `HMAC-SHA256(REFRESH_TOKEN_PEPPER, token)` hex in
-  `sessions.refresh_token_hash`. **Rotated on every use**: the used row gets `revoked_at`, a new row is inserted
-  with the same `family_id`, same `audience`, same `expires_at`, same `mfa_at`.
-- **Reuse detection**: presenting a refresh token whose row is already revoked ⇒ revoke **all** sessions of that
-  user (security.md §4), write audit log `auth.refresh_reuse`, respond `401 SESSION_REVOKED`.
+  `sessions.refresh_token_hash`. **Rotated on every use**: the used row gets `revoked_at` and
+  `revoked_reason = 'rotated'`, a new row is inserted with the same `family_id`, same `audience`, same
+  `expires_at`, same `mfa_at`.
+- Every revoke records **why** in `sessions.revoked_reason`: `rotated`, `logout`, `logout_all`,
+  `device_revoked` (`DELETE /auth/sessions/:id`), `password_reset`, `reuse`, `access_lost` (refresh for a user who
+  is no longer active or no longer allowed in that app), `account_claimed` (see §3, first verification).
+- **Reuse detection** (security.md §4), checked in this order on `POST /auth/refresh`:
+  1. unknown token, or the family's `expires_at` has passed ⇒ `401 UNAUTHENTICATED` (an expired family never
+     triggers reuse handling);
+  2. row revoked for any reason other than `rotated` (revoked on purpose) ⇒ `401 SESSION_REVOKED`, nothing
+     else is touched — signing out one device, logging out or resetting the password never signs the user out
+     of sessions created later;
+  3. row rotated away **less than 10 s ago** (`REUSE_GRACE_MS`) ⇒ a concurrent refresh (two tabs, a retried
+     request): `401 UNAUTHENTICATED`, nothing revoked. Two parallel refreshes with one token: one rotates, the
+     other gets this answer;
+  4. row rotated away longer ago ⇒ the token was stolen: revoke **all** sessions of that user (reason `reuse`),
+     write audit log `auth.refresh_reuse`, respond `401 SESSION_REVOKED`.
 - Session row stores `audience`, `user_agent`, `ip` (client IP), `mfa_at`, `last_used_at`.
 - Seller context (`sel`, `srole`) is resolved **at token issue time** from `seller_members` (first membership by
   `created_at`; multi-store switching is out of scope). It is **never** read from request body, query or URL.
@@ -136,6 +149,11 @@ only; every TOTP attempt against it counts as a failed login on failure.
 - `otp_codes`: add `request_ip inet`; index `(request_ip, created_at DESC)`.
 - New `twofa_backup_codes (id uuid PK, user_id uuid FK users ON DELETE CASCADE, code_hash text UNIQUE,
   used_at timestamptz, created_at timestamptz default now())`, index `(user_id)`.
+
+Follow-up migrations (B2 fixes):
+- `20260926160000_b2_session_revoked_reason`: `sessions.revoked_reason text` + CHECK (allowed values, only on a
+  revoked row). Backfill: a revoked row followed by a newer row of its family is `rotated`; other old revoked
+  rows stay NULL, which counts as revoked on purpose.
 
 ## 7. Next.js apps (BFF — tokens never reach browser JavaScript)
 
