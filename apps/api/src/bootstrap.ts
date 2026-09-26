@@ -1,13 +1,19 @@
 import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { Express } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { APP_CONFIG, type AppConfig } from './config/config';
 
 export const API_PREFIX = 'v1';
 
 /** Shared by main.ts and the integration tests so both run the exact same app. */
 export function configureApp(app: INestApplication): INestApplication {
+  // Client IP (rate limits, sessions, audit) = req.ip; only these proxies may set X-Forwarded-For.
+  const config = app.get<AppConfig>(APP_CONFIG);
+  const server: Express = app.getHttpAdapter().getInstance();
+  server.set('trust proxy', config.trustProxy);
   app.setGlobalPrefix(API_PREFIX);
   app.use(helmet());
   const origins = (
