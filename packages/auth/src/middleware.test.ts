@@ -132,6 +132,21 @@ describe('createAuthMiddleware', () => {
     expect(api.fetch).not.toHaveBeenCalled();
   });
 
+  it('never refreshes inside the server-side fetch Next makes for an action redirect', async () => {
+    const { middleware, api } = setup();
+    const internal = await middleware(request('/account', { hb_rt: 'rt-0' }, { rsc: '1' }));
+    expect(isPassThrough(internal)).toBe(true);
+    expect(api.fetch).not.toHaveBeenCalled();
+  });
+
+  it('still refreshes client-side RSC navigations (they carry the router state tree)', async () => {
+    const { middleware, api } = setup({ 'POST /auth/refresh': [{ status: 200, body: tokens(1) }] });
+    await middleware(
+      request('/account', { hb_rt: 'rt-0' }, { rsc: '1', 'next-router-state-tree': '%5B%5D' }),
+    );
+    expect(api.count('POST /auth/refresh')).toBe(1);
+  });
+
   it('lets the page decide when the API is unreachable', async () => {
     const { middleware } = setup({ 'POST /auth/refresh': ['network'] });
     const res = await middleware(request('/account', { hb_rt: 'rt-0' }));

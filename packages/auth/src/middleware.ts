@@ -31,12 +31,21 @@ export function isProtectedPath(pathname: string, prefixes: readonly string[]): 
   });
 }
 
-/** Router prefetches must never rotate the refresh token (parallel prefetches look like reuse). */
-function isPrefetch(req: NextRequest): boolean {
+/**
+ * Requests whose Set-Cookie would not reach the browser, or that may run in parallel, must never
+ * rotate the refresh token (the browser would keep a revoked token, and its next refresh would
+ * look like reuse and end every session):
+ * - router prefetches (several at once);
+ * - Next.js's own server-side fetch that renders the target of a server-action redirect: it
+ *   sends `rsc: 1` without the router state tree header, and Next drops its Set-Cookie headers.
+ */
+function mustNotRefresh(req: NextRequest): boolean {
+  const h = req.headers;
   return (
-    req.headers.get('next-router-prefetch') === '1' ||
-    req.headers.get('purpose') === 'prefetch' ||
-    (req.headers.get('sec-purpose') ?? '').includes('prefetch')
+    h.get('next-router-prefetch') === '1' ||
+    h.get('purpose') === 'prefetch' ||
+    (h.get('sec-purpose') ?? '').includes('prefetch') ||
+    (h.get('rsc') === '1' && !h.has('next-router-state-tree'))
   );
 }
 
@@ -80,7 +89,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
     }
     const refreshToken = req.cookies.get(names.refresh)?.value;
     if (!refreshToken) return redirectToLogin(req, false);
-    if (isPrefetch(req)) return NextResponse.next();
+    if (mustNotRefresh(req)) return NextResponse.next();
 
     let tokens: TokenPair;
     try {
