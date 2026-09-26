@@ -1,11 +1,12 @@
 // Texts for every auth message. Codes appear only in the message body, never in logs.
 
-export type CodePurpose = 'login' | 'verify' | 'reset';
+export type CodePurpose = 'login' | 'verify' | 'reset' | 'contact';
 
 const WHAT: Record<CodePurpose, string> = {
   login: 'sign-in',
   verify: 'verification',
   reset: 'password reset',
+  contact: 'confirmation',
 };
 
 export interface MessageText {
@@ -35,5 +36,16 @@ export function lockNotice(minutes: number): MessageText {
     text:
       `After several failed sign-in attempts we locked your account for ${minutes} ` +
       `minute${minutes === 1 ? '' : 's'}. If this wasn't you, reset your password once the lock ends.`,
+  };
+}
+
+/** Sent to the account's other confirmed address when a new sign-in identifier is confirmed. */
+export function identifierAddedNotice(kind: 'email' | 'phone', masked: string): MessageText {
+  const what = kind === 'email' ? 'email address' : 'mobile number';
+  return {
+    subject: `A ${what} was added to your Her Beauty account`,
+    text:
+      `The ${what} ${masked} was confirmed on your Her Beauty account and can now be used to log in. ` +
+      'If this wasn’t you, reset your password and contact Her Beauty support.',
   };
 }

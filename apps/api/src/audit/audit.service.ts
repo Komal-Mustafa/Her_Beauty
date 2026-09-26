@@ -12,6 +12,7 @@ export type AuditAction =
   | 'auth.password_reset'
   | 'auth.2fa_enabled'
   | 'auth.2fa_disabled'
+  | 'auth.contact_verified'
   | 'seller.application_started';
 
 export interface AuditEntry {

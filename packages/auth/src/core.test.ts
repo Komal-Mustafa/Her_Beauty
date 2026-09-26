@@ -810,13 +810,13 @@ describe('adoptTokens', () => {
   });
 });
 
-describe('sendContactVerification', () => {
-  it('sends the code to the account’s own mobile number, never to one from the form', async () => {
+describe('contact confirmation', () => {
+  const SENT = { status: 202, body: { status: 'sent', expiresInSec: 300 } };
+  const CONFIRMED = { ...ME, phoneVerified: true };
+
+  it('asks the API for a code with the session, never with an address from the form', async () => {
     const { auth, api } = setup(
-      {
-        'GET /me': [{ status: 200, body: ME }],
-        'POST /auth/otp/send': [{ status: 202, body: { status: 'sent', expiresInSec: 300 } }],
-      },
+      { 'GET /me': [{ status: 200, body: ME }], 'POST /me/contacts/send': [SENT] },
       { hb_web_at: 'at-0' },
     );
     const sent = await auth.sendContactVerification({
@@ -825,19 +825,17 @@ describe('sendContactVerification', () => {
       next: '/security',
     });
     expect(sent).toEqual({ status: 'sent', channel: 'sms', target: '•••• 567', expiresInSec: 300 });
-    expect(api.calls[1]?.body).toEqual({
-      audience: 'web',
-      channel: 'sms',
-      target: '+923001234567',
-      purpose: 'verify',
-    });
+    expect(api.calls[1]?.body).toEqual({ channel: 'sms' });
+    expect(api.calls[1]?.headers.authorization).toBe('Bearer at-0');
+    expect(api.count('POST /auth/otp/send')).toBe(0);
     await expect(auth.getPending()).resolves.toMatchObject({
-      purpose: 'verify',
+      purpose: 'contact',
+      target: '•••• 567',
       next: '/security',
     });
   });
 
-  it('explains a missing address and a missing session without calling otp/send', async () => {
+  it('explains a missing address and a missing session without asking for a code', async () => {
     const { auth, api } = setup(
       { 'GET /me': [{ status: 200, body: { ...ME, phone: null } }] },
       { hb_web_at: 'at-0' },
@@ -852,6 +850,70 @@ describe('sendContactVerification', () => {
     ).resolves.toMatchObject({
       code: 'UNAUTHENTICATED',
     });
-    expect(api.count('POST /auth/otp/send')).toBe(0);
+    expect(api.count('POST /me/contacts/send')).toBe(0);
+  });
+
+  it('verifies the code with the session and returns to where it started', async () => {
+    const { auth, api, jar, tick } = setup(
+      {
+        'GET /me': [{ status: 200, body: ME }],
+        'POST /me/contacts/send': [SENT, SENT],
+        'POST /me/contacts/verify': [
+          apiError(400, 'INVALID_CODE'),
+          { status: 200, body: CONFIRMED },
+        ],
+      },
+      { hb_web_at: 'at-0' },
+    );
+    await auth.sendContactVerification({ channel: 'sms', next: '/account' });
+    tick(61_000);
+    await expect(auth.resendCode()).resolves.toMatchObject({ status: 'sent', target: '•••• 567' });
+    expect(api.calls.at(-1)?.body).toEqual({ channel: 'sms' });
+
+    const wrong = await auth.verifyOtp({ code: '111111' });
+    expect(wrong).toMatchObject({ status: 'error', code: 'INVALID_CODE' });
+    const ok = await auth.verifyOtp({ code: '123 456' });
+    expect(ok).toEqual({ status: 'ok', user: CONFIRMED, next: '/account' });
+    expect(api.calls.at(-1)?.body).toEqual({ channel: 'sms', code: '123456' });
+    expect(api.count('POST /auth/otp/verify')).toBe(0);
+    expect(jar.values.has('hb_web_pending')).toBe(false);
+    expect(jar.values.get('hb_web_at')).toBe('at-0');
+  });
+
+  it('treats "already confirmed" as done and a number held elsewhere as an error', async () => {
+    const confirmedElsewhere = setup(
+      {
+        'GET /me': [
+          { status: 200, body: ME },
+          { status: 200, body: CONFIRMED },
+        ],
+        'POST /me/contacts/send': [SENT],
+        'POST /me/contacts/verify': [apiError(409, 'CONFLICT')],
+      },
+      { hb_web_at: 'at-0' },
+    );
+    await confirmedElsewhere.auth.sendContactVerification({ channel: 'sms' });
+    await expect(confirmedElsewhere.auth.verifyOtp({ code: '123456' })).resolves.toMatchObject({
+      status: 'ok',
+      user: CONFIRMED,
+    });
+
+    const taken = setup(
+      {
+        'GET /me': [
+          { status: 200, body: ME },
+          { status: 200, body: ME },
+        ],
+        'POST /me/contacts/send': [SENT],
+        'POST /me/contacts/verify': [apiError(409, 'CONFLICT')],
+      },
+      { hb_web_at: 'at-0' },
+    );
+    await taken.auth.sendContactVerification({ channel: 'sms' });
+    const res = await taken.auth.verifyOtp({ code: '123456' });
+    expect(res).toMatchObject({ status: 'error', code: 'CONFLICT' });
+    if (res.status === 'error')
+      expect(res.message).toMatch(/already on another Her Beauty account/);
+    expect(taken.jar.values.has('hb_web_pending')).toBe(true);
   });
 });

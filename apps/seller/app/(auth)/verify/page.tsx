@@ -39,7 +39,7 @@ export default async function SellerVerifyPage() {
   const by = pending.channel === 'sms' ? 'text message' : 'email';
   // A code asked for on Security confirms a contact of a signed-in seller: going back is the way
   // out. A sign-up code starts over at registration.
-  const fromSecurity = pending.next === '/security';
+  const fromSecurity = pending.purpose === 'contact';
   return (
     <>
       <h1 className="font-display text-[34px] font-semibold leading-tight text-ink-900">
@@ -55,7 +55,7 @@ export default async function SellerVerifyPage() {
       <ResendCode action={resendCodeAction} resendInSec={pending.resendInSec} />
       <p className="mt-6 text-sm">
         <Link
-          href={fromSecurity ? '/security' : '/register'}
+          href={fromSecurity ? pending.next : '/register'}
           prefetch={fromSecurity ? false : undefined}
           className="inline-flex min-h-11 items-center font-medium text-pink-600 hover:underline"
         >

@@ -67,10 +67,10 @@ const standing = (user: User, id: Identifier): Standing => {
 /**
  * Who is proving an address of an unclaimed account, as far as the API can tell:
  * - "sign_up": the code the sign-up request itself sent, and nobody disputed the sign-up since;
- * - "resend": a verify code sent again later — possibly to someone who never signed up;
- * - "someone": a disputed sign-up, a code login or a password reset.
+ * - "someone": anything else — a verify code sent again later (possibly to someone who never
+ *   signed up), a disputed sign-up, a code login or a password reset.
  */
-type Claimant = 'sign_up' | 'resend' | 'someone';
+type Claimant = 'sign_up' | 'someone';
 
 const isUniqueViolation = (e: unknown) =>
   e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
@@ -260,7 +260,7 @@ export class AuthService {
       throw invalidCode();
     }
     const undisputed = found.passwordHash !== null;
-    const claimant: Claimant = !undisputed ? 'someone' : checked.signUp ? 'sign_up' : 'resend';
+    const claimant: Claimant = undisputed && checked.signUp ? 'sign_up' : 'someone';
     const user = await this.claim(found, target, claimant);
     if (!audienceAllows(body.audience, user.role) || this.lockout.isLocked(user)) {
       throw invalidCredentials();
@@ -315,9 +315,9 @@ export class AuthService {
   /**
    * First proof of an address on an unclaimed account (docs/b2-auth.md §3). Unless the prover is
    * the sign-up's own author (`sign_up`), what the sign-up chose is not trusted: the password,
-   * any 2FA and any session are dropped, and — unless it is a plain `resend` of an undisputed
-   * sign-up — the pending mobile number too. Whoever signs up with somebody else's address
-   * therefore keeps no way in once the real owner proves it (pre-hijacking).
+   * any 2FA, any session and the pending mobile number are dropped. Whoever signs up with
+   * somebody else's address therefore keeps no way in once the real owner proves it
+   * (pre-hijacking), and their number can never be confirmed into the account.
    */
   private async claim(user: User, target: Identifier, claimant: Claimant): Promise<User> {
     const now = new Date();
@@ -335,7 +335,7 @@ export class AuthService {
           twofaSecretEnc: null,
           twofaEnabledAt: null,
           twofaLastStep: null,
-          ...(claimant === 'someone' ? { pendingPhone: null } : {}),
+          pendingPhone: null,
         },
       });
     });

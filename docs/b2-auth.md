@@ -70,6 +70,8 @@ otp/send 5/min, otp/verify 10/min, password/* 5/min, 2fa/challenge 10/min, refre
 | `POST /auth/password/reset` | public | `identifier + code + newPassword` ⇒ new hash, clears lock, **revokes all sessions**, audit `auth.password_reset`. On an unclaimed account it is a claim first. |
 | `GET /me` | bearer | `Me` profile (user, seller membership summary, 2FA state, verification state). |
 | `PATCH /me` | bearer | Update `fullName` only (strict schema; anything else ⇒ 400). |
+| `POST /me/contacts/send` | bearer | `{channel}`: send a code to confirm the caller's **own** email or mobile number (for `sms`: `users.phone`, else `users.pending_phone`). The address always comes from the account; a `target` in the body ⇒ 400. `409 CONFLICT` if already confirmed, `400` if there is none. Same send limits as other codes. `202 {status:"sent", expiresInSec}`. |
+| `POST /me/contacts/verify` | bearer | `{channel, code}`: confirm it. The code is bound to the account as well as the address (hashed with the user id, stored as purpose `contact:<userId>` so no other account can spend or replace it), 3 tries, single use. A pending phone moves to `users.phone` (a sign-in identifier from then on) and the account's other confirmed address gets a notice. A number another account already holds ⇒ `409 CONFLICT`, only after a right code (so it cannot probe numbers). Audited as `auth.contact_verified` (channel + masked address). Returns `Me`. |
 | `GET /seller/me` | bearer, aud `seller`, has seller context | The caller's seller: status, type, store name, onboarding step. |
 | `POST /seller/application` | bearer, aud `seller`, **no** seller context yet | Start an application: `{type, storeName}` ⇒ seller draft + owner membership + role `seller`; returns new `TokenPair` (so `sel` appears). `409` if the user already has a seller. |
 | `GET /seller/products` | bearer, aud `seller`, seller context | The caller's own products (all statuses), via `withSellerScope` (RLS second lock). |
@@ -86,16 +88,16 @@ The first proof of an unclaimed account's identifier (verify code, code login, o
 Who proved it decides what survives from the sign-up:
 - the code the sign-up request itself sent (hashed under its own `sign_up` label), and nobody registered the
   same address since: everything is kept (the normal sign-up);
-- a `verify` code sent again with `otp/send` on an undisputed sign-up: the password, 2FA and sessions are
-  dropped, the pending phone is kept (unverified) — a resent code may reach someone who never signed up;
-- anything else (a disputed sign-up, a code login, a password reset): password, 2FA, sessions **and** the
-  pending phone are dropped.
+- anything else (a `verify` code sent again with `otp/send` — it may reach someone who never signed up —, a
+  disputed sign-up, a code login, a password reset): password, 2FA, sessions **and** the pending phone are
+  dropped.
 
 The claimant signs in without a password and sets one with "forgot password". Sessions are revoked with
 reason `account_claimed`. So whoever signs up with somebody else's address or number keeps no way in once the
-real owner proves it (registration pre-hijacking), and a number typed at sign-up can neither be verified into
-the account nor used to sign in to it. Verifying a second identifier of an established account needs a
-signed-in flow (later phase).
+real owner proves it (registration pre-hijacking), and a number typed at sign-up is never a credential by
+itself. Only a pending phone kept by a `sign_up` claim — chosen by whoever proved the primary address with
+the sign-up's own code — can later be confirmed by the signed-in owner (`/me/contacts/send` +
+`/me/contacts/verify`), which makes it a sign-in identifier.
 
 ### LoginResult (discriminated on `status`)
 - `{status:"ok", tokens: TokenPair, user: Me}`

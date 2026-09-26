@@ -134,7 +134,7 @@ describe.skipIf(!hasDb)('auth: account claims', () => {
       await passwordLogin(api, email, 'seller', SQUATTER_PASSWORD).expect(401);
     });
 
-    it('a verify code sent again (not by the sign-up itself) never keeps the sign-up password', async () => {
+    it('a verify code sent again (not by the sign-up itself) keeps neither the sign-up password nor its number', async () => {
       const email = uniqueEmail('resent');
       const phone = uniquePhone();
       await api
@@ -149,13 +149,8 @@ describe.skipIf(!hasDb)('auth: account claims', () => {
       // Anyone can ask for a new sign-up code for an address (seller "send a new code" form).
       const { body } = await sendAndVerify(verifyBody('web', 'email', email), email, 200);
       const login = expectOk(body);
-      // Signed in without the sign-up password; the number is kept but is not an identifier.
-      expect(login.user).toMatchObject({
-        emailVerified: true,
-        hasPassword: false,
-        phone: phone.e164,
-        phoneVerified: false,
-      });
+      // Signed in without the sign-up password or number (it may be the squatter's own).
+      expect(login.user).toMatchObject({ emailVerified: true, hasPassword: false, phone: null });
       await passwordLogin(api, email, 'web', SQUATTER_PASSWORD).expect(401);
     });
 

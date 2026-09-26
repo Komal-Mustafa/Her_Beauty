@@ -281,6 +281,16 @@ export type ResetPasswordRequest = z.infer<typeof ResetPasswordRequest>;
 export const UpdateMeRequest = z.object({ fullName: FullName });
 export type UpdateMeRequest = z.infer<typeof UpdateMeRequest>;
 
+/**
+ * A signed-in user confirms the email or mobile number already on their account (the address
+ * comes from the session, never from the request): send a code, then verify it.
+ */
+export const ContactSendRequest = z.object({ channel: OtpChannel });
+export type ContactSendRequest = z.infer<typeof ContactSendRequest>;
+
+export const ContactVerifyRequest = z.object({ channel: OtpChannel, code: OtpCode });
+export type ContactVerifyRequest = z.infer<typeof ContactVerifyRequest>;
+
 export const StartSellerApplicationRequest = z.object({
   type: SellerType,
   storeName: StoreName,

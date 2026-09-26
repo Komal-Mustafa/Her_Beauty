@@ -3,7 +3,17 @@
 // Values are base64url JSON; anything that does not decode to the expected shape is ignored.
 import type { OtpChannel } from '@hb/types';
 
-export type PendingPurpose = 'login' | 'verify' | 'reset';
+/** "contact": a signed-in user confirming the email or mobile number on their account. */
+export type PendingPurpose = 'login' | 'verify' | 'reset' | 'contact';
+
+const PURPOSES: readonly string[] = [
+  'login',
+  'verify',
+  'reset',
+  'contact',
+] satisfies PendingPurpose[];
+const isPurpose = (v: unknown): v is PendingPurpose =>
+  typeof v === 'string' && PURPOSES.includes(v);
 
 export type PendingState = {
   v: 1;
@@ -71,7 +81,7 @@ export function decodePending(value: string | undefined): PendingState | null {
   if (!s || s.v !== 1) return null;
   if (!str(s.target) || !str(s.display) || !str(s.next)) return null;
   if (s.channel !== 'sms' && s.channel !== 'email') return null;
-  if (s.purpose !== 'login' && s.purpose !== 'verify' && s.purpose !== 'reset') return null;
+  if (!isPurpose(s.purpose)) return null;
   if (typeof s.sentAt !== 'number' || !Number.isFinite(s.sentAt)) return null;
   const state: PendingState = {
     v: 1,

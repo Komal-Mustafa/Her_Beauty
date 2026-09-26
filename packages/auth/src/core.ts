@@ -2,6 +2,7 @@
 // unit-tested. Design: docs/b2-auth.md §3 and §7.
 import {
   CodeSent,
+  ContactVerifyRequest,
   Email,
   ForgotPasswordRequest,
   LoginRequest,
@@ -472,8 +473,9 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
   }
 
   /**
-   * Sends a "verify" code to the signed-in user's own email or mobile number (`channel`), then
-   * /verify finishes it. The address comes from the session, never from the form.
+   * Sends a code to confirm the signed-in user's own email or mobile number (`channel`), then
+   * /verify finishes it. The API takes the address from the session, never from the form; the
+   * one kept here is only for display.
    */
   async function sendContactVerification(input: HelperInput): Promise<CodeSentState> {
     const data = readInput(input);
@@ -486,13 +488,67 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
     }
     if (!me) return makeError('UNAUTHENTICATED');
     const target = channel === 'email' ? me.email : me.phone;
+    const what = channel === 'email' ? 'email address' : 'mobile number';
     if (!target) {
-      const what = channel === 'email' ? 'email address' : 'mobile number';
       return makeError('VALIDATION_FAILED', {
         messages: { VALIDATION_FAILED: `There’s no ${what} on your account to confirm yet.` },
       });
     }
-    return sendOtp({ channel, target, purpose: 'verify', next: data.next });
+    const ctx: ErrorContext = {
+      messages: { CONFLICT: `Your ${what} is already confirmed. Refresh the page to see it.` },
+    };
+    return attempt(ctx, async () => {
+      const sent = await apiFetch('/me/contacts/send', CodeSent, {
+        method: 'POST',
+        body: { channel },
+      });
+      const display = maskTarget(target, channel);
+      writePending(await deps.cookies(), {
+        v: 1,
+        target,
+        display,
+        channel,
+        purpose: 'contact',
+        sentAt: now(),
+        next: safeNextPath(data.next, homePath),
+      });
+      return { status: 'sent', channel, target: display, expiresInSec: sent.expiresInSec } as const;
+    });
+  }
+
+  /**
+   * Checks a contact code. A 409 means the address is confirmed already (another tab got there
+   * first: that counts as done) or, for a mobile number, that another account holds it.
+   */
+  async function verifyContact(
+    jar: CookieJar,
+    state: PendingState,
+    code: string | undefined,
+    ctx: ErrorContext,
+  ): Promise<VerifyResultState> {
+    const parsed = ContactVerifyRequest.safeParse({ channel: state.channel, code });
+    if (!parsed.success) return invalid(parsed.error.issues, ctx);
+    const done = (user: Me) => {
+      clearIfPresent(jar, names().pending);
+      return { status: 'ok', user, next: state.next } as const;
+    };
+    try {
+      return done(await apiFetch('/me/contacts/verify', Me, { method: 'POST', body: parsed.data }));
+    } catch (error) {
+      if (!(error instanceof ApiRequestError && error.code === 'CONFLICT')) {
+        return toAuthError(error, ctx);
+      }
+      const me = await getSessionUncached().catch(() => null);
+      if (me && (state.channel === 'email' ? me.emailVerified : me.phoneVerified)) return done(me);
+      // The cookie stays, so /verify keeps showing this message and its way back (clearing a
+      // cookie in a server action re-renders the page, which would show "timed out" instead).
+      return makeError('CONFLICT', {
+        messages: {
+          CONFLICT:
+            'This mobile number is already on another Her Beauty account. Log in with it instead, or contact support.',
+        },
+      });
+    }
   }
 
   /** Sends a fresh code for whatever /verify or /reset-password is waiting on. */
@@ -509,6 +565,12 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
           method: 'POST',
           body: { audience, identifier: state.target },
         });
+      } else if (state.purpose === 'contact') {
+        const sent = await apiFetch('/me/contacts/send', CodeSent, {
+          method: 'POST',
+          body: { channel: state.channel },
+        });
+        expiresInSec = sent.expiresInSec;
       } else {
         const sent = await call('/auth/otp/send', CodeSent, {
           method: 'POST',
@@ -538,6 +600,9 @@ export function createAuthCore(config: AuthConfig, deps: AuthDeps) {
       codeField: 'code',
     };
     if (!state || state.purpose === 'reset') return makeError('PENDING_EXPIRED', ctx);
+    if (state.purpose === 'contact') {
+      return verifyContact(jar, state, data.code?.replace(/\s+/g, ''), ctx);
+    }
     const code = data.code?.replace(/\s+/g, '') ?? state.code;
     const parsed = OtpVerifyRequest.safeParse({
       audience,

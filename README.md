@@ -11,8 +11,9 @@ All product, technical and design decisions live in [`docs/`](docs/00-README.md)
 | `apps/web` | Customer storefront | http://localhost:3000 |
 | `apps/seller` | Vendor + manufacturer portal | http://localhost:3001 |
 | `apps/admin` | Admin console | http://localhost:3002 |
-| `apps/api` | NestJS REST API (`/v1`): catalogue, stores, reviews, ads, plans | http://localhost:4000/v1 |
+| `apps/api` | NestJS REST API (`/v1`): catalogue, stores, reviews, ads, plans, accounts + login | http://localhost:4000/v1 |
 | `packages/db` | Prisma schema (55 tables), migrations with RLS, seed | – |
+| `packages/auth` | Login for the three apps: server-only API helpers, cookies, middleware, shared auth UI | – |
 | `packages/ui` | Brand components (Button, Badge, Stepper, ShadePicker…) | – |
 | `packages/three` | 3D: device tiers, models, viewer, hero (P2–P3) | – |
 | `packages/sdk` | `getApi()` data client — mock data or the real API (`NEXT_PUBLIC_API_MODE`) | – |
@@ -42,6 +43,28 @@ pnpm --filter @hb/api dev                                    # http://localhost:
 Point the storefront at it with `NEXT_PUBLIC_API_MODE=http` in `apps/web/.env.local`
 (default `mock` keeps working without a database). API tests (`pnpm --filter @hb/api test`)
 run against the seeded database and are skipped when `DATABASE_URL` is not set.
+
+### Accounts and login
+
+Design: [`docs/b2-auth.md`](docs/b2-auth.md). The apps talk to the API through their own server
+(server actions + httpOnly cookies), so they need `API_INTERNAL_URL` (or
+`NEXT_PUBLIC_API_BASE_URL`) and the API running. In development every SMS and email, including
+one-time codes, is written to the API log (`[dev sms to …]`).
+
+Demo accounts come from the seed when you set a password for them (never committed):
+
+```bash
+SEED_DEMO_PASSWORD='choose-one' SEED_ADMIN_EMAIL=you@example.com pnpm --filter @hb/db seed
+```
+
+| App | Log in with |
+|---|---|
+| Shop (`/login`) | `ayesha@hb.test` or `sana@hb.test`, or any mobile number with a code |
+| Seller portal (`/login`) | `owner@<store-slug>.test`, e.g. `owner@rose-house.test` |
+| Admin (`/login`) | the `SEED_ADMIN_EMAIL` account; the first sign-in sets up two-step verification |
+
+Behind a proxy or CDN, set `TRUSTED_PROXY_HOPS` / `CLIENT_IP_HEADER` on the Next apps and
+`TRUST_PROXY` on the API so rate limits see the visitor's real IP (see `.env.example`).
 
 Checks (same as CI): `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
 

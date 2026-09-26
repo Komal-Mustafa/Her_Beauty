@@ -33,11 +33,28 @@ export default async function VerifyPage() {
   }
 
   const by = pending.channel === 'sms' ? 'text message' : 'email';
-  const changeHref = pending.purpose === 'login' ? '/login?method=code' : '/register';
+  // A code asked for on the account page confirms a contact of a signed-in customer: going back
+  // is the way out. Other codes can start again with a different number or email.
+  const fromAccount = pending.purpose === 'contact';
+  const changeHref = fromAccount
+    ? pending.next
+    : pending.purpose === 'login'
+      ? '/login?method=code'
+      : '/register';
+  const changeLabel = fromAccount
+    ? 'Back to your account'
+    : pending.channel === 'sms'
+      ? 'Use a different number'
+      : 'Use a different email';
+  const heading = pending.needsName
+    ? 'One last step'
+    : fromAccount
+      ? `Confirm your ${pending.channel === 'sms' ? 'mobile number' : 'email'}`
+      : 'Enter your code';
   return (
     <>
       <h1 className="font-display text-[34px] font-semibold leading-tight text-ink-900">
-        {pending.needsName ? 'One last step' : 'Enter your code'}
+        {heading}
       </h1>
       {!pending.needsName && (
         <p className="mt-2 text-ink-500">
@@ -55,9 +72,10 @@ export default async function VerifyPage() {
       <p className="mt-6 text-sm">
         <Link
           href={changeHref}
+          prefetch={fromAccount ? false : undefined}
           className="inline-flex min-h-11 items-center font-medium text-pink-600 hover:underline"
         >
-          {pending.channel === 'sms' ? 'Use a different number' : 'Use a different email'}
+          {changeLabel}
         </Link>
       </p>
     </>

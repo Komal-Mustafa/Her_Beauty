@@ -15,10 +15,11 @@ export const OTP_SEND_WINDOW_MS = 15 * 60_000;
 const CODE_DIGITS = 6;
 
 /**
- * otp_codes.purpose values written by B2. "notice" rows only count towards the send limits;
- * "challenge" rows mark used 2FA challenge tokens (no request IP, so they count towards nothing).
+ * otp_codes.purpose values written by B2. "contact" codes confirm a signed-in user's own address
+ * and are bound to that user. "notice" rows only count towards the send limits; "challenge" rows
+ * mark used 2FA challenge tokens (no request IP, so they count towards nothing).
  */
-export type StoredPurpose = 'login' | 'verify' | 'reset' | 'notice' | 'challenge';
+export type StoredPurpose = 'login' | 'verify' | 'reset' | 'contact' | 'notice' | 'challenge';
 
 /**
  * A code that matched. `signUp`: the "verify" code sent by the sign-up request itself (hashed
@@ -35,6 +36,14 @@ export interface CheckedCode {
  * — including the ones we decide not to send — records one row, so the per-target and per-IP
  * limits (3 per 15 minutes) behave the same whether or not an account exists.
  */
+/**
+ * The purpose column of a row. A code bound to an account is stored per account
+ * ("contact:<userId>"), so no other account can use up its tries or replace it; `target` stays
+ * the bare address, so the per-address send limit still counts it.
+ */
+const rowPurpose = (purpose: StoredPurpose, userId?: string) =>
+  userId ? `${purpose}:${userId}` : purpose;
+
 @Injectable()
 export class OtpService {
   constructor(
@@ -43,8 +52,15 @@ export class OtpService {
     @Inject(MESSAGE_PROVIDER) private readonly messages: MessageProvider,
   ) {}
 
-  private hash(label: StoredPurpose | 'sign_up', target: string, code: string): string {
-    return hmacSha256Hex(this.config.otpPepper, `${label}|${target}|${code}`);
+  /** `userId` binds the code to one account as well (purpose "contact"). */
+  private hash(
+    label: StoredPurpose | 'sign_up',
+    target: string,
+    code: string,
+    userId?: string,
+  ): string {
+    const subject = userId ? `${userId}|${target}` : target;
+    return hmacSha256Hex(this.config.otpPepper, `${label}|${subject}|${code}`);
   }
 
   /** 429 RATE_LIMITED (with details.retryAfterSec) when any target or the IP is over the limit. */
@@ -77,7 +93,7 @@ export class OtpService {
    * Check the limits and record one send for `target`. With `live` a fresh code replaces any
    * older unused code for the same target + purpose and is returned; otherwise a dead row is
    * written (it can never be verified) and null is returned. `signUp` marks the "verify" code
-   * sent by a sign-up request (see CheckedCode).
+   * sent by a sign-up request (see CheckedCode); `userId` binds the code to that account.
    */
   async reserve(
     target: string,
@@ -85,8 +101,10 @@ export class OtpService {
     ip: string | null,
     live: boolean,
     signUp = false,
+    userId?: string,
   ): Promise<string | null> {
     const code = live ? randomDigits(CODE_DIGITS) : null;
+    const stored = rowPurpose(purpose, userId);
     const now = new Date();
     await this.db.$transaction(async (tx) => {
       // Serialise sends per target and per IP so parallel requests cannot overshoot the limit.
@@ -95,7 +113,7 @@ export class OtpService {
       await this.assertCanSend([target], ip, tx);
       if (code) {
         await tx.otpCode.updateMany({
-          where: { target, purpose, usedAt: null, expiresAt: { gt: now } },
+          where: { target, purpose: stored, usedAt: null, expiresAt: { gt: now } },
           data: { expiresAt: now },
         });
       }
@@ -103,8 +121,13 @@ export class OtpService {
         data: {
           id: uuidv7(),
           target,
-          purpose,
-          codeHash: this.hash(signUp ? 'sign_up' : purpose, target, code ?? randomToken(24)),
+          purpose: stored,
+          codeHash: this.hash(
+            signUp ? 'sign_up' : purpose,
+            target,
+            code ?? randomToken(24),
+            userId,
+          ),
           expiresAt: new Date(now.getTime() + OTP_TTL_SEC * 1000),
           usedAt: code ? null : now,
           requestIp: ip,
@@ -117,12 +140,18 @@ export class OtpService {
   /**
    * Check a code without consuming it. A wrong code uses up one of the three tries of the
    * newest live code. Returns the row id (to pass to `consume`) and whether it is a sign-up code.
+   * A code bound to an account (`userId` at reserve) only matches with the same `userId`.
    */
-  async check(target: string, purpose: StoredPurpose, code: string): Promise<CheckedCode | null> {
+  async check(
+    target: string,
+    purpose: StoredPurpose,
+    code: string,
+    userId?: string,
+  ): Promise<CheckedCode | null> {
     const row = await this.db.otpCode.findFirst({
       where: {
         target,
-        purpose,
+        purpose: rowPurpose(purpose, userId),
         usedAt: null,
         expiresAt: { gt: new Date() },
         attempts: { lt: OTP_MAX_ATTEMPTS },
@@ -131,7 +160,7 @@ export class OtpService {
       select: { id: true, codeHash: true },
     });
     if (!row) return null;
-    if (safeEqual(row.codeHash, this.hash(purpose, target, code))) {
+    if (safeEqual(row.codeHash, this.hash(purpose, target, code, userId))) {
       return { id: row.id, signUp: false };
     }
     if (purpose === 'verify' && safeEqual(row.codeHash, this.hash('sign_up', target, code))) {
@@ -162,8 +191,9 @@ export class OtpService {
     target: string,
     purpose: StoredPurpose,
     code: string,
+    userId?: string,
   ): Promise<CheckedCode | null> {
-    const checked = await this.check(target, purpose, code);
+    const checked = await this.check(target, purpose, code, userId);
     return checked && (await this.consume(checked.id)) ? checked : null;
   }
 
