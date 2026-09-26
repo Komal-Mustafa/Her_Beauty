@@ -2,6 +2,7 @@
 @import '@hb/config/tailwind/theme.css';
 
 @source '../../../packages/ui/src';
+@source '../../../packages/auth/src/client';
 @source '../../../packages/three/src';
 
 /* Lenis smooth scroll (https://github.com/darkroomengineering/lenis#considerations) */

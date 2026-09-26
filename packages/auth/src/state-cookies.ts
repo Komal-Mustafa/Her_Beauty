@@ -1,4 +1,5 @@
-// Short-lived httpOnly state cookies: hb_mfa (2FA challenge) and hb_pending (code pages).
+// Short-lived httpOnly state cookies: hb_<audience>_mfa (2FA challenge) and hb_<audience>_pending
+// (code pages).
 // Values are base64url JSON; anything that does not decode to the expected shape is ignored.
 import type { OtpChannel } from '@hb/types';
 

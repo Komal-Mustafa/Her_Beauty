@@ -1,12 +1,11 @@
 'use client';
 
-import type { CodeSentState } from '@hb/auth';
 import { Alert, Button } from '@hb/ui';
 import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { resendCodeAction } from '@/app/(auth)/actions';
-
-const COOLDOWN_SEC = 60;
+import { RESEND_COOLDOWN_SEC } from '../copy';
+import type { CodeSentState } from '../results';
+import type { FormAction } from './types';
 
 function clock(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
@@ -29,16 +28,23 @@ function ResendButton({ waiting }: { waiting: boolean }) {
 
 /**
  * "Resend code" with a countdown. The server enforces the same cooldown, so without JavaScript
- * the button simply answers "you can ask again in N seconds".
+ * the button simply answers "you can ask again in N seconds". `action` is the app's server action
+ * around `auth.resendCode()`.
  */
-export function ResendCode({ resendInSec }: { resendInSec: number }) {
-  const [state, action] = useActionState<CodeSentState | null, FormData>(resendCodeAction, null);
+export function ResendCode({
+  action: resendAction,
+  resendInSec,
+}: {
+  action: FormAction<CodeSentState>;
+  resendInSec: number;
+}) {
+  const [state, action] = useActionState<CodeSentState | null, FormData>(resendAction, null);
   const [left, setLeft] = useState(resendInSec);
   const [ready, setReady] = useState(false);
 
   useEffect(() => setReady(true), []);
   useEffect(() => {
-    if (state?.status === 'sent') setLeft(COOLDOWN_SEC);
+    if (state?.status === 'sent') setLeft(RESEND_COOLDOWN_SEC);
     else if (state?.status === 'error' && state.retryAfterSec) setLeft(state.retryAfterSec);
   }, [state]);
   useEffect(() => {

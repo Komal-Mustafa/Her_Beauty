@@ -1,14 +1,11 @@
 'use client';
 
-import type { RegisterResultState } from '@hb/auth';
-import { Input, PasswordInput, SubmitButton } from '@hb/ui';
+import { Captcha, type RegisterResultState } from '@hb/auth/client';
+import { FormAlert, Input, PasswordInput, SubmitButton, useFieldErrors } from '@hb/ui';
 import { useActionState } from 'react';
 import { registerAction } from '@/app/(auth)/actions';
 import { checkSellerType, checks } from '@/lib/validation';
-import { Captcha } from './captcha';
-import { FormAlert } from './form-alert';
 import { SellerTypeChoice } from './seller-type-choice';
-import { useFieldErrors } from './use-field-errors';
 
 /**
  * Seller sign-up (b2-auth §7): Vendor or Manufacturer, store name, name, email, mobile and

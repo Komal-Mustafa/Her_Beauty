@@ -2,19 +2,20 @@
 
 import {
   ApiRequestError,
+  FIELD_MESSAGES,
   friendlyMessage,
   type AuthError,
   type AuthResultCode,
+  type CodeSentState,
   type DoneState,
   type FieldErrors,
   type FormValues,
+  type TwoFactorPanelState,
 } from '@hb/auth';
 import { StartSellerApplicationRequest, TokenPair } from '@hb/types';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import { storeTokens } from '@/lib/session-tokens';
-import { MESSAGES } from '@/lib/validation';
 
 // Seller portal actions. Every call is authenticated with the session cookies (Bearer to the
 // API); the user and seller ids always come from the token, never from the form.
@@ -26,8 +27,8 @@ export type ApplicationState = AuthError | null;
 /** API/zod field → form field ("type" is the "sellerType" radio group in the form). */
 const FORM_FIELD: Record<string, string> = { type: 'sellerType', storeName: 'storeName' };
 const FIELD_MESSAGE: Record<string, string> = {
-  sellerType: MESSAGES.sellerType,
-  storeName: MESSAGES.storeName,
+  sellerType: FIELD_MESSAGES.sellerType,
+  storeName: FIELD_MESSAGES.storeName,
 };
 
 function text(value: FormDataEntryValue | null): string {
@@ -97,19 +98,32 @@ export async function startApplicationAction(
       );
     }
   }
-  if (tokens) await storeTokens(tokens);
+  // The API rotated the session: the old refresh token is dead, so the new pair replaces it now.
+  if (tokens) await auth.adoptTokens(tokens);
   // "exists": another tab already started it; the dashboard shows its status.
   if (outcome === 'signed_out') redirect('/login?next=%2Fdashboard');
   redirect('/dashboard');
 }
 
-// ---------- two-factor ----------
+// ---------- contact details ----------
 
-export type TwoFactorPanelState =
-  | { step: 'scan'; secret: string; qrDataUrl: string; error?: AuthError }
-  | { step: 'codes'; backupCodes: string[] }
-  | { step: 'failed'; error: AuthError }
-  | null;
+/**
+ * Confirms the email or mobile number on the account (the form only picks which; the address
+ * comes from the session). A confirmed mobile number can then be used to log in (b2-auth §1).
+ */
+export async function sendVerificationAction(
+  _prev: CodeSentState | null,
+  formData: FormData,
+): Promise<CodeSentState> {
+  const result = await auth.sendContactVerification({
+    channel: formData.get('channel'),
+    next: '/security',
+  });
+  if (result.status === 'sent') redirect('/verify');
+  return result;
+}
+
+// ---------- two-factor ----------
 
 const QR_PREFIX = 'data:image/svg+xml;base64,';
 

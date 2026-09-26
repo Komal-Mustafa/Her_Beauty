@@ -1,6 +1,6 @@
 'use server';
 
-import type { AuthError, CodeSentState, DoneState, ProfileState } from '@hb/auth';
+import type { CodeSentState, DoneState, ProfileState, TwoFactorPanelState } from '@hb/auth';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
@@ -17,21 +17,21 @@ export async function updateProfileAction(
   return result;
 }
 
-/** Sends a code to confirm the email or mobile number on the account, then opens /verify. */
+/**
+ * Sends a code to confirm the account's own email or mobile number (the form only picks which),
+ * then opens /verify.
+ */
 export async function sendVerificationAction(
   _prev: CodeSentState | null,
   formData: FormData,
 ): Promise<CodeSentState> {
-  const result = await auth.sendOtp(formData);
+  const result = await auth.sendContactVerification({
+    channel: formData.get('channel'),
+    next: '/account',
+  });
   if (result.status === 'sent') redirect('/verify');
   return result;
 }
-
-export type TwoFactorPanelState =
-  | { step: 'scan'; secret: string; qrDataUrl: string; error?: AuthError }
-  | { step: 'codes'; backupCodes: string[] }
-  | { step: 'failed'; error: AuthError }
-  | null;
 
 const QR_PREFIX = 'data:image/svg+xml;base64,';
 

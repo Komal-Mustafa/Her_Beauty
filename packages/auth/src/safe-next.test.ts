@@ -30,8 +30,25 @@ describe('safeNextPath', () => {
     ['/\n/evil.com'],
     ['/ok\\evil'],
     [`/${'a'.repeat(2100)}`],
+    // Dot segments collapse during URL resolution into a protocol-relative "//evil.com".
+    ['/.//evil.com'],
+    ['/..//evil.com'],
+    ['/a/..//evil.com'],
+    ['/x/../..//evil.com/phish'],
+    ['/%2e//evil.com'],
+    ['/%2e%2e//evil.com/phish'],
+    ['/%2E%2E//evil.com'],
+    ['/./\\evil.com'],
   ])('rejects %j', (raw) => {
     expect(safeNextPath(raw, '/home')).toBe('/home');
+  });
+
+  it('never returns a value a browser would resolve to another origin', () => {
+    const samples = ['/.//a.test', '/..//a.test/x?y#z', '/b/./..//a.test', '/%2e/%2e%2e//a.test'];
+    for (const raw of samples) {
+      const out = safeNextPath(raw, '/home');
+      expect(new URL(out, 'https://herbeauty.pk').origin).toBe('https://herbeauty.pk');
+    }
   });
 
   it('rejects non-strings', () => {

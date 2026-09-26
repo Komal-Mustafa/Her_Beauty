@@ -2,12 +2,12 @@ import { createAuth } from '@hb/auth';
 import { ADMIN_ROLES, type Me, type UserRole } from '@hb/types';
 
 /**
- * Admin console auth (docs/b2-auth.md §1, §7): audience "admin", SameSite=Strict cookies,
- * 12-hour sessions, 2FA always (the API answers mfa_required / mfa_setup_required).
+ * Admin console auth (docs/b2-auth.md §1, §7): audience "admin" (hb_admin_* cookies, always
+ * SameSite=Strict), 12-hour sessions, 2FA always (the API answers mfa_required /
+ * mfa_setup_required).
  */
 export const auth = createAuth({
   audience: 'admin',
-  sameSite: 'strict',
   loginPath: '/login',
   homePath: '/',
 });

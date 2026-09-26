@@ -1,6 +1,5 @@
 'use client';
 
-import type { FieldErrors } from '@hb/auth';
 import {
   useEffect,
   useRef,
@@ -9,33 +8,49 @@ import {
   type FocusEvent,
   type FormEvent,
 } from 'react';
-import type { Check } from '@/lib/validation';
+import type { FieldCheck, FieldErrorMap } from '../lib/field-checks';
 
 type FieldElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-type ServerState = { fieldErrors?: FieldErrors } | null | undefined;
+type ServerState = { fieldErrors?: FieldErrorMap } | null | undefined;
 
-type Options = {
+export type UseFieldErrorsOptions = {
   /** Checks that need several fields (run on submit only). */
-  formCheck?: (form: HTMLFormElement) => FieldErrors;
+  formCheck?: (form: HTMLFormElement) => FieldErrorMap;
 };
 
 const KEEP_TYPES = new Set(['hidden', 'submit', 'button', 'checkbox', 'radio', 'file']);
 
+function isField(el: unknown): el is FieldElement {
+  return (
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLTextAreaElement ||
+    el instanceof HTMLSelectElement
+  );
+}
+
+/** The first control in document order whose name has an error (a radio group: its first option). */
+function firstInvalid(form: HTMLFormElement, errors: FieldErrorMap): HTMLElement | null {
+  for (const el of Array.from(form.elements)) {
+    if (isField(el) && el.name && errors[el.name]) return el;
+  }
+  return null;
+}
+
 /**
  * Blur-first validation: a field is checked when it loses focus, its error clears as soon as the
- * value is fixed, and everything is checked on submit (the first invalid field gets focus).
- * Server field errors show until that field is edited.
+ * value is fixed, and everything is checked on submit (the first invalid field, in the order the
+ * person reads the form, gets focus). Server field errors show until that field is edited.
  *
  * `server` must be the action's error state (null after a success). React resets a form after
  * its action runs; when the action comes back with an error we put back what the person typed
  * (it never leaves the browser), so fixing one field does not mean retyping the others.
  */
 export function useFieldErrors(
-  checks: Record<string, Check>,
+  checks: Record<string, FieldCheck>,
   server: ServerState,
-  { formCheck }: Options = {},
+  { formCheck }: UseFieldErrorsOptions = {},
 ) {
-  const [client, setClient] = useState<FieldErrors>({});
+  const [client, setClient] = useState<FieldErrorMap>({});
   const [edited, setEdited] = useState<{ source: ServerState; names: string[] }>({
     source: server,
     names: [],
@@ -83,24 +98,18 @@ export function useFieldErrors(
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     const form = e.currentTarget;
-    const found: FieldErrors = { ...(formCheck?.(form) ?? {}) };
+    const found: FieldErrorMap = { ...(formCheck?.(form) ?? {}) };
     for (const name of Object.keys(checks)) {
       const el = form.elements.namedItem(name);
-      if (
-        el instanceof HTMLInputElement ||
-        el instanceof HTMLTextAreaElement ||
-        el instanceof HTMLSelectElement
-      ) {
+      if (isField(el)) {
         const message = found[name] ?? run(el);
         if (message) found[name] = message;
       }
     }
     setClient(found);
-    const first = Object.keys(found)[0];
-    if (first) {
+    if (Object.keys(found).length) {
       e.preventDefault();
-      const el = form.elements.namedItem(first);
-      if (el instanceof HTMLElement) el.focus();
+      firstInvalid(form, found)?.focus();
       return;
     }
     const values = new Map<string, string>();

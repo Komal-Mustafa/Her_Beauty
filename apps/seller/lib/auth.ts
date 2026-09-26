@@ -5,7 +5,6 @@ import { cookies } from 'next/headers';
 /** Seller portal auth (docs/b2-auth.md §1, §7): audience "seller", SameSite=Lax, 7-day sessions. */
 export const auth = createAuth({
   audience: 'seller',
-  sameSite: 'lax',
   loginPath: '/login',
   homePath: '/dashboard',
 });
@@ -29,6 +28,6 @@ export async function signedInUser(): Promise<Me | null> {
  */
 export async function hasSessionCookies(): Promise<boolean> {
   const jar = await cookies();
-  const names = cookieNames();
+  const names = cookieNames(auth.config.audience);
   return Boolean(jar.get(names.access)?.value || jar.get(names.refresh)?.value);
 }

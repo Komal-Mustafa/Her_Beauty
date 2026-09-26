@@ -20,7 +20,12 @@ function request(
     .map(([k, v]) => `${k}=${v}`)
     .join('; ');
   return new NextRequest(`http://localhost:3000${path}`, {
-    headers: { ...(cookie ? { cookie } : {}), 'x-forwarded-for': '203.0.113.7', ...headers },
+    headers: {
+      ...(cookie ? { cookie } : {}),
+      // The browser wrote the first entry; the proxy in front of Next.js appended the second.
+      'x-forwarded-for': '198.51.100.66, 203.0.113.7',
+      ...headers,
+    },
   });
 }
 
@@ -28,7 +33,6 @@ function setup(routes: Parameters<typeof fakeApi>[0] = {}) {
   const api = fakeApi(routes);
   const middleware = createAuthMiddleware({
     audience: 'web',
-    sameSite: 'lax',
     protectedPrefixes: ['/account'],
     loginPath: '/login',
     fetch: api.fetch,
@@ -69,7 +73,7 @@ describe('createAuthMiddleware', () => {
 
   it('lets a live-looking access cookie through without calling the API', async () => {
     const { middleware, api } = setup();
-    const res = await middleware(request('/account', { hb_at: jwt(NOW / 1000 + 600) }));
+    const res = await middleware(request('/account', { hb_web_at: jwt(NOW / 1000 + 600) }));
     expect(isPassThrough(res)).toBe(true);
     expect(api.fetch).not.toHaveBeenCalled();
   });
@@ -86,7 +90,7 @@ describe('createAuthMiddleware', () => {
   it('refreshes an expired access cookie, sets the new cookies and forwards them to the page', async () => {
     const { middleware, api } = setup({ 'POST /auth/refresh': [{ status: 200, body: tokens(1) }] });
     const res = await middleware(
-      request('/account', { hb_at: jwt(NOW / 1000 - 5), hb_rt: 'rt-0', theme: 'x' }),
+      request('/account', { hb_web_at: jwt(NOW / 1000 - 5), hb_web_rt: 'rt-0', theme: 'x' }),
     );
     expect(isPassThrough(res)).toBe(true);
     expect(api.calls[0]).toMatchObject({
@@ -95,38 +99,38 @@ describe('createAuthMiddleware', () => {
       body: { refreshToken: 'rt-0' },
       headers: { 'x-forwarded-for': '203.0.113.7' },
     });
-    expect(res.cookies.get('hb_at')).toMatchObject({
+    expect(res.cookies.get('hb_web_at')).toMatchObject({
       value: 'at-1',
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
     });
-    expect(res.cookies.get('hb_at')?.maxAge).toBe(900);
-    expect(res.cookies.get('hb_rt')?.value).toBe('rt-1');
+    expect(res.cookies.get('hb_web_at')?.maxAge).toBe(900);
+    expect(res.cookies.get('hb_web_rt')?.value).toBe('rt-1');
     // The page render sees the new cookies (Next passes these as overridden request headers).
-    expect(res.headers.get('x-middleware-request-cookie')).toContain('hb_at=at-1');
+    expect(res.headers.get('x-middleware-request-cookie')).toContain('hb_web_at=at-1');
     expect(res.headers.get('x-middleware-request-cookie')).toContain('theme=x');
   });
 
   it('refreshes when the access cookie is missing but a refresh cookie exists', async () => {
     const { middleware, api } = setup({ 'POST /auth/refresh': [{ status: 200, body: tokens(1) }] });
-    await middleware(request('/account', { hb_rt: 'rt-0' }));
+    await middleware(request('/account', { hb_web_rt: 'rt-0' }));
     expect(api.count('POST /auth/refresh')).toBe(1);
   });
 
   it('redirects and clears cookies when the refresh token is rejected', async () => {
     const { middleware } = setup({ 'POST /auth/refresh': [apiError(401, 'SESSION_REVOKED')] });
-    const res = await middleware(request('/account', { hb_at: 'garbage', hb_rt: 'rt-0' }));
+    const res = await middleware(request('/account', { hb_web_at: 'garbage', hb_web_rt: 'rt-0' }));
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/login?next=%2Faccount');
-    expect(res.cookies.get('hb_rt')).toMatchObject({ value: '', maxAge: 0 });
-    expect(res.cookies.get('hb_at')).toMatchObject({ value: '', maxAge: 0 });
+    expect(res.cookies.get('hb_web_rt')).toMatchObject({ value: '', maxAge: 0 });
+    expect(res.cookies.get('hb_web_at')).toMatchObject({ value: '', maxAge: 0 });
   });
 
   it('never refreshes for router prefetches', async () => {
     const { middleware, api } = setup();
     const res = await middleware(
-      request('/account', { hb_rt: 'rt-0' }, { 'next-router-prefetch': '1' }),
+      request('/account', { hb_web_rt: 'rt-0' }, { 'next-router-prefetch': '1' }),
     );
     expect(isPassThrough(res)).toBe(true);
     expect(api.fetch).not.toHaveBeenCalled();
@@ -134,7 +138,7 @@ describe('createAuthMiddleware', () => {
 
   it('never refreshes inside the server-side fetch Next makes for an action redirect', async () => {
     const { middleware, api } = setup();
-    const internal = await middleware(request('/account', { hb_rt: 'rt-0' }, { rsc: '1' }));
+    const internal = await middleware(request('/account', { hb_web_rt: 'rt-0' }, { rsc: '1' }));
     expect(isPassThrough(internal)).toBe(true);
     expect(api.fetch).not.toHaveBeenCalled();
   });
@@ -142,21 +146,27 @@ describe('createAuthMiddleware', () => {
   it('still refreshes client-side RSC navigations (they carry the router state tree)', async () => {
     const { middleware, api } = setup({ 'POST /auth/refresh': [{ status: 200, body: tokens(1) }] });
     await middleware(
-      request('/account', { hb_rt: 'rt-0' }, { rsc: '1', 'next-router-state-tree': '%5B%5D' }),
+      request('/account', { hb_web_rt: 'rt-0' }, { rsc: '1', 'next-router-state-tree': '%5B%5D' }),
     );
     expect(api.count('POST /auth/refresh')).toBe(1);
   });
 
+  it('forwards the proxy-seen IP, never a spoofed first X-Forwarded-For entry', async () => {
+    const { middleware, api } = setup({ 'POST /auth/refresh': [{ status: 200, body: tokens(1) }] });
+    await middleware(request('/account', { hb_web_rt: 'rt-0' }));
+    expect(api.calls[0]?.headers['x-forwarded-for']).toBe('203.0.113.7');
+  });
+
   it('lets the page decide when the API is unreachable', async () => {
     const { middleware } = setup({ 'POST /auth/refresh': ['network'] });
-    const res = await middleware(request('/account', { hb_rt: 'rt-0' }));
+    const res = await middleware(request('/account', { hb_web_rt: 'rt-0' }));
     expect(isPassThrough(res)).toBe(true);
   });
 
   it('uses the __Host- cookie names in production', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const { middleware } = setup({ 'POST /auth/refresh': [{ status: 200, body: tokens(1) }] });
-    const res = await middleware(request('/account', { '__Host-hb_rt': 'rt-0' }));
-    expect(res.cookies.get('__Host-hb_at')).toMatchObject({ value: 'at-1', secure: true });
+    const res = await middleware(request('/account', { '__Host-hb_web_rt': 'rt-0' }));
+    expect(res.cookies.get('__Host-hb_web_at')).toMatchObject({ value: 'at-1', secure: true });
   });
 });

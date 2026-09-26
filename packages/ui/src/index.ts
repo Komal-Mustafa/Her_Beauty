@@ -20,3 +20,6 @@ export { CodeInput } from './components/code-input';
 export { Tabs, type TabItem } from './components/tabs';
 export { Alert } from './components/alert';
 export { SubmitButton } from './components/submit-button';
+export { FormAlert } from './components/form-alert';
+export { useFieldErrors, type UseFieldErrorsOptions } from './hooks/use-field-errors';
+export { fieldRule, optionalField, type FieldCheck, type FieldErrorMap } from './lib/field-checks';

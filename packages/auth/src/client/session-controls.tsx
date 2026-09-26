@@ -1,12 +1,21 @@
 'use client';
 
-import type { DoneState } from '@hb/auth';
 import { buttonVariants, cn, SubmitButton } from '@hb/ui';
 import { useActionState } from 'react';
-import { logoutAllAction, revokeSessionAction } from '@/app/(portal)/actions';
+import type { DoneState } from '../results';
+import type { FormAction } from './types';
 
-export function RevokeSessionButton({ id, device }: { id: string; device: string }) {
-  const [state, action] = useActionState<DoneState | null, FormData>(revokeSessionAction, null);
+/** "Sign out" for one other device. `action` wraps `auth.revokeSession()`. */
+export function RevokeSessionButton({
+  id,
+  device,
+  action: revokeAction,
+}: {
+  id: string;
+  device: string;
+  action: FormAction<DoneState>;
+}) {
+  const [state, action] = useActionState<DoneState | null, FormData>(revokeAction, null);
   return (
     <form action={action} className="flex shrink-0 flex-col items-end gap-1">
       <input type="hidden" name="id" value={id} />
@@ -28,8 +37,11 @@ export function RevokeSessionButton({ id, device }: { id: string; device: string
   );
 }
 
-/** Two-step (details/summary works without JavaScript): names the consequence before acting. */
-export function SignOutEverywhere() {
+/**
+ * Two-step (details/summary works without JavaScript): names the consequence before acting.
+ * `action` wraps `auth.logoutAll()`.
+ */
+export function SignOutEverywhere({ action: logoutAllAction }: { action: FormAction<DoneState> }) {
   const [state, action] = useActionState<DoneState | null, FormData>(logoutAllAction, null);
   return (
     <details className="group">

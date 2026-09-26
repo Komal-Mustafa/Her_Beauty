@@ -1,14 +1,11 @@
 'use client';
 
-import type { FieldErrors, RegisterResultState } from '@hb/auth';
-import { Input, PasswordInput, SubmitButton } from '@hb/ui';
+import { Captcha, type FieldErrors, type RegisterResultState } from '@hb/auth/client';
+import { FormAlert, Input, PasswordInput, SubmitButton, useFieldErrors } from '@hb/ui';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { registerAction } from '@/app/(auth)/actions';
 import { checks, MESSAGES } from '@/lib/validation';
-import { Captcha } from './captcha';
-import { FormAlert } from './form-alert';
-import { useFieldErrors } from './use-field-errors';
 
 function needsEmailOrPhone(form: HTMLFormElement): FieldErrors {
   const email = form.elements.namedItem('email');

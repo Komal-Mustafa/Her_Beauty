@@ -1,14 +1,11 @@
 'use client';
 
-import type { CodeSentState, LoginResultState } from '@hb/auth';
-import { Input, PasswordInput, SubmitButton } from '@hb/ui';
+import { Captcha, type CodeSentState, type LoginResultState } from '@hb/auth/client';
+import { FormAlert, Input, PasswordInput, SubmitButton, useFieldErrors } from '@hb/ui';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { loginAction, sendLoginCodeAction } from '@/app/(auth)/actions';
 import { checks } from '@/lib/validation';
-import { Captcha } from './captcha';
-import { FormAlert } from './form-alert';
-import { useFieldErrors } from './use-field-errors';
 
 export function PasswordLoginForm({ next }: { next: string }) {
   const [state, action] = useActionState<LoginResultState | null, FormData>(loginAction, null);

@@ -1,8 +1,8 @@
+import { ResendCode, ResetPasswordForm } from '@hb/auth/client';
 import { Alert, Button } from '@hb/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ResetPasswordForm } from '@/components/auth/password-reset-forms';
-import { ResendCode } from '@/components/auth/resend-code';
+import { resendCodeAction, resetPasswordAction } from '@/app/(auth)/actions';
 import { auth } from '@/lib/auth';
 
 export const metadata: Metadata = { title: 'Choose a new password' };
@@ -37,9 +37,9 @@ export default async function ResetPasswordPage() {
         device.
       </p>
       <div className="mt-8">
-        <ResetPasswordForm />
+        <ResetPasswordForm action={resetPasswordAction} />
       </div>
-      <ResendCode resendInSec={pending.resendInSec} />
+      <ResendCode action={resendCodeAction} resendInSec={pending.resendInSec} />
       <p className="mt-6 text-sm">
         <Link
           href="/forgot-password"

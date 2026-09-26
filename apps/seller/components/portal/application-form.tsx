@@ -1,11 +1,9 @@
 'use client';
 
-import { Input, SubmitButton } from '@hb/ui';
+import { FormAlert, Input, SubmitButton, useFieldErrors } from '@hb/ui';
 import { useActionState } from 'react';
 import { startApplicationAction, type ApplicationState } from '@/app/(portal)/actions';
-import { FormAlert } from '@/components/auth/form-alert';
 import { SellerTypeChoice } from '@/components/auth/seller-type-choice';
-import { useFieldErrors } from '@/components/auth/use-field-errors';
 import { checkSellerType, checks } from '@/lib/validation';
 
 /** For signed-in users without a store: type + store name → draft application. */

@@ -1,11 +1,9 @@
 'use client';
 
-import type { ProfileState } from '@hb/auth';
-import { Input, SubmitButton } from '@hb/ui';
+import type { ProfileState } from '@hb/auth/client';
+import { FormAlert, Input, SubmitButton, useFieldErrors } from '@hb/ui';
 import { useActionState } from 'react';
 import { updateProfileAction } from '@/app/(shop)/account/actions';
-import { FormAlert } from '@/components/auth/form-alert';
-import { useFieldErrors } from '@/components/auth/use-field-errors';
 import { checks } from '@/lib/validation';
 
 export function ProfileForm({ fullName }: { fullName: string }) {

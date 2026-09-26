@@ -1,6 +1,7 @@
+import { ResendCode } from '@hb/auth/client';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ResendCode } from '@/components/auth/resend-code';
+import { resendCodeAction } from '@/app/(auth)/actions';
 import { VerifyAgainForm, VerifyForm } from '@/components/auth/verify-form';
 import { auth } from '@/lib/auth';
 
@@ -36,6 +37,9 @@ export default async function SellerVerifyPage() {
   }
 
   const by = pending.channel === 'sms' ? 'text message' : 'email';
+  // A code asked for on Security confirms a contact of a signed-in seller: going back is the way
+  // out. A sign-up code starts over at registration.
+  const fromSecurity = pending.next === '/security';
   return (
     <>
       <h1 className="font-display text-[34px] font-semibold leading-tight text-ink-900">
@@ -48,13 +52,14 @@ export default async function SellerVerifyPage() {
       <div className="mt-8">
         <VerifyForm />
       </div>
-      <ResendCode resendInSec={pending.resendInSec} />
+      <ResendCode action={resendCodeAction} resendInSec={pending.resendInSec} />
       <p className="mt-6 text-sm">
         <Link
-          href="/register"
+          href={fromSecurity ? '/security' : '/register'}
+          prefetch={fromSecurity ? false : undefined}
           className="inline-flex min-h-11 items-center font-medium text-pink-600 hover:underline"
         >
-          Start again with different details
+          {fromSecurity ? 'Back to Security' : 'Start again with different details'}
         </Link>
       </p>
     </>

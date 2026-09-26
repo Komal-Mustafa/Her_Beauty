@@ -3,7 +3,7 @@
 // decide whether a refresh is worth trying; the API verifies every token.
 import { TokenPair, type AuthAudience } from '@hb/types';
 import { NextResponse, type NextRequest } from 'next/server';
-import { clearCookie, cookieNames, writeTokenCookies, type SameSite } from './cookies';
+import { clearCookie, cookieNames, sameSiteFor, writeTokenCookies } from './cookies';
 import { ApiRequestError } from './errors';
 import { callApi, clientForwardHeaders, type FetchLike } from './http';
 import { accessTokenLooksLive } from './jwt';
@@ -11,9 +11,8 @@ import { refreshOnce } from './refresh';
 import { safeNextPath } from './safe-next';
 
 export type AuthMiddlewareConfig = {
-  /** Must match the app's createAuth() audience. */
+  /** Must match the app's createAuth() audience (cookie names and SameSite come from it). */
   audience: AuthAudience;
-  sameSite: SameSite;
   /** Path prefixes that need a session, e.g. ["/account"] (matches "/account" and "/account/…"). */
   protectedPrefixes: readonly string[];
   /** Default "/login". */
@@ -64,6 +63,7 @@ function headersWithCookies(req: NextRequest, updates: Record<string, string>): 
 export function createAuthMiddleware(config: AuthMiddlewareConfig) {
   const loginPath = config.loginPath ?? '/login';
   const now = config.now ?? Date.now;
+  const sameSite = sameSiteFor(config.audience);
 
   function redirectToLogin(req: NextRequest, clear: boolean): NextResponse {
     const next = safeNextPath(`${req.nextUrl.pathname}${req.nextUrl.search}`, '/');
@@ -71,9 +71,9 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
     url.search = `?next=${encodeURIComponent(next)}`;
     const res = NextResponse.redirect(url);
     if (clear) {
-      const names = cookieNames();
+      const names = cookieNames(config.audience);
       for (const name of [names.access, names.refresh]) {
-        if (req.cookies.has(name)) clearCookie(res.cookies, name, config.sameSite);
+        if (req.cookies.has(name)) clearCookie(res.cookies, name, sameSite);
       }
     }
     return res;
@@ -83,7 +83,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
     if (!isProtectedPath(req.nextUrl.pathname, config.protectedPrefixes)) {
       return NextResponse.next();
     }
-    const names = cookieNames();
+    const names = cookieNames(config.audience);
     if (accessTokenLooksLive(req.cookies.get(names.access)?.value, now())) {
       return NextResponse.next();
     }
@@ -120,7 +120,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
         }),
       },
     });
-    writeTokenCookies(res.cookies, names, tokens, config.sameSite, now());
+    writeTokenCookies(res.cookies, names, tokens, sameSite, now());
     return res;
   };
 }

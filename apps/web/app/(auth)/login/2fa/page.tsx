@@ -1,7 +1,8 @@
+import { TwoFactorForm } from '@hb/auth/client';
 import { Alert, Button } from '@hb/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { TwoFactorForm } from '@/components/auth/two-factor-form';
+import { twoFactorChallengeAction } from '@/app/(auth)/actions';
 import { auth } from '@/lib/auth';
 
 export const metadata: Metadata = { title: 'Two-factor check' };
@@ -41,7 +42,11 @@ export default async function TwoFactorPage({
           : 'Open your authenticator app and enter the 6-digit code for Her Beauty.'}
       </p>
       <div className="mt-8">
-        <TwoFactorForm key={useBackup ? 'backup' : 'totp'} backup={useBackup} />
+        <TwoFactorForm
+          key={useBackup ? 'backup' : 'totp'}
+          action={twoFactorChallengeAction}
+          backup={useBackup}
+        />
       </div>
       <div className="mt-6 flex flex-col items-center gap-1 text-sm">
         <Link
