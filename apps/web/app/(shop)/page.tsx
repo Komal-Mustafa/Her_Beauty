@@ -1,58 +1,70 @@
-import { getApi } from '@hb/sdk';
-import { Button, Container, Reveal, SectionHeading } from '@hb/ui';
+import { formatMoney, getApi } from '@hb/sdk';
+import type { HeroProduct } from '@hb/three/3d';
+import { Container, Reveal, SectionHeading } from '@hb/ui';
 import Image from 'next/image';
 import Link from 'next/link';
+import { CinematicHero, type HeroAd } from '@/components/home/cinematic-hero';
+import { HeroFallback } from '@/components/home/hero-fallback';
 import { SITE } from '@/lib/site';
 
-/*
- * P1 home shell. The static poster + H1 below is the LCP element and stays as the
- * fallback when the 4D cinematic hero (P3) replaces it on capable devices.
- */
+const DUO: readonly [HeroProduct, HeroProduct] = [
+  { kind: 'lipstick', shadeHex: '#C2185B' },
+  { kind: 'compact', shadeHex: '#F48FB1' },
+];
+
+async function heroData() {
+  const api = getApi();
+  const [[scene], trending] = await Promise.all([
+    api.getHeroScenes(),
+    api.getProducts({ sort: 'best_selling', limit: 24 }),
+  ]);
+
+  // Three vendor products with 3D orbit in during scene 3 (their procedural model kind + first shade).
+  const withModels = await Promise.all(
+    trending.items.filter((p) => p.has3d).map((p) => api.getProduct(p.slug)),
+  );
+  const orbit: HeroProduct[] = [];
+  for (const p of withModels) {
+    const kind = p?.media.find((m) => m.model3dKind)?.model3dKind;
+    if (p && kind && !orbit.some((o) => o.kind === kind)) {
+      orbit.push({ kind, shadeHex: p.shades[0]?.hex ?? '#C2185B' });
+    }
+    if (orbit.length === 3) break;
+  }
+
+  const served = scene?.ad ?? null;
+  const adProduct = served?.productSlug ? await api.getProduct(served.productSlug) : null;
+  const ad: HeroAd | null = served
+    ? {
+        headline: served.headline,
+        sellerName: served.sellerName,
+        href: served.href,
+        ctaLabel: served.ctaLabel,
+        priceLabel: adProduct ? formatMoney(adProduct.price) : null,
+        product: served.media.model3dKind
+          ? { kind: served.media.model3dKind, shadeHex: served.media.shadeHex ?? '#F8BBD9' }
+          : null,
+      }
+    : null;
+
+  return { scene, orbit, ad };
+}
+
 export default async function HomePage() {
   const api = getApi();
-  const [categories, [scene]] = await Promise.all([api.getCategories(), api.getHeroScenes()]);
+  const [categories, { scene, orbit, ad }] = await Promise.all([api.getCategories(), heroData()]);
 
   return (
     <>
-      <section aria-labelledby="hero-title" className="relative overflow-hidden bg-grad-pink">
-        <Container
-          wide
-          className="grid min-h-[80vh] items-center gap-10 py-16 md:grid-cols-2 md:py-24"
-        >
-          <div className="relative z-10 max-w-xl animate-rise">
-            <p className="eyebrow mb-4 text-gold-800">Her Beauty</p>
-            <h1
-              id="hero-title"
-              className="font-display text-[40px] font-semibold leading-[1.05] text-ink-900 md:text-[72px]"
-            >
-              <span className="text-grad-rose">{SITE.tagline}</span>
-            </h1>
-            <p className="mt-6 max-w-md text-lg text-ink-500">
-              {scene?.subtitle ?? SITE.description}
-            </p>
-            <div className="mt-10 flex flex-wrap gap-3">
-              <Button asChild size="lg">
-                <Link href="/new">Shop new arrivals</Link>
-              </Button>
-              <Button asChild size="lg" variant="secondary">
-                <Link href="/become-a-seller">Sell on Her Beauty</Link>
-              </Button>
-            </div>
-          </div>
-          {scene && (
-            <div className="relative aspect-[16/9] w-full md:aspect-[4/3]">
-              <Image
-                src={scene.poster.url}
-                alt={scene.poster.alt}
-                fill
-                priority
-                sizes="(min-width: 768px) 50vw, 100vw"
-                className="object-contain object-center"
-              />
-            </div>
-          )}
-        </Container>
-      </section>
+      <CinematicHero
+        title={scene?.title ?? SITE.tagline}
+        subtitle={scene?.subtitle ?? SITE.description}
+        ad={ad}
+        duo={DUO}
+        orbit={orbit}
+        fallback={<HeroFallback scene={scene} />}
+      />
+      <div id="after-hero" tabIndex={-1} className="scroll-mt-24" />
 
       <section aria-labelledby="categories-title" className="py-20">
         <Container>

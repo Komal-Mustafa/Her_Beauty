@@ -12,7 +12,9 @@
 
 ## Current status
 - **P1 Setup — done (PR open).** Monorepo, brand tokens, fonts, base UI kit, mock data + API client, storefront layout, seller/admin shells, CI.
-- Next: **P2 3D foundation** (procedural models, tiered canvas, /dev/3d playground).
+- **P2 3D foundation — done (PR open).** `@hb/three/3d`: tiered canvas, studio lighting, petals + gold dust, procedural lipstick/compact/perfume/cream jar/pedestal, `<Model>` (glb with procedural fallback), `<ProductViewer>`. Playground at `/dev/3d` (dev only).
+- **P3 Cinematic hero — done (PR open).** Home hero is a 4-scene scroll film (logo draw → lipstick + compact → story + orbit → paid hero ad on pedestal). `heroState()` in `@hb/three` maps scroll to scene state; `HeroScene` in `@hb/three/3d`; DOM layers + GSAP in `apps/web/components/home/cinematic-hero.tsx`. Static `HeroFallback` is the LCP and the whole hero on low tier / reduced motion.
+- Next: **P4 home sections + sidebar ads**.
 - Full phase list P1–P11: docs/frontend-plan.md §9. Backend track (NestJS API) follows P11.
 
 ## Decisions log
@@ -22,6 +24,11 @@
 | 2026-09-26 | Order tracker shows **Accepted**, not "Packed" | Matches 04-ui-ux §5 and the seller_order_status enum |
 | 2026-09-26 | 3D lives in `packages/three`, data client + mocks in `packages/sdk` | 02-trd §3; seller portal reuses both |
 | 2026-09-26 | Tailwind 4 with CSS `@theme`; default Tailwind palette removed | Enforces "tokens only" (rules.md §7) |
+| 2026-09-26 | 3D entry split: `@hb/three` (tier helpers, tiny) vs `@hb/three/3d` (WebGL, load via `next/dynamic` ssr:false) | Keeps three.js out of first-load JS |
+| 2026-09-26 | Studio lighting built from drei Lightformers, no HDRI download | CSP connect-src stays 'self' |
+| 2026-09-26 | Products without a .glb use procedural models | Every product can show 3D before sellers upload models |
+| 2026-09-26 | Hero pinning uses CSS `position: sticky`, GSAP only scrubs | Robust with Lenis; no pin-spacer layout jumps |
+| 2026-09-26 | Hero film mounts after `requestIdleCallback`; static hero stays the LCP | Keeps LCP fast on every device |
 | 2026-09-26 | Brand gold = spec `#D4AF37` (logo art is rose-gold) | Default until client confirms |
 | 2026-09-26 | `motion` package used for Framer Motion | Same library, current package name |
 | 2026-09-26 | Next.js 15.5 (not 16) | TRD specifies Next 15 |

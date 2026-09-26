@@ -1,4 +1,4 @@
-import type { ElementType, HTMLAttributes, ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '../lib/cn';
 
 /** 04-ui-ux §4: max width 1280 content / 1440 hero; gutters 16 mobile, 24 desktop. */
@@ -24,7 +24,7 @@ type SectionHeadingProps = {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
-  as?: ElementType;
+  as?: 'h1' | 'h2' | 'h3' | 'p';
   align?: 'left' | 'center';
   className?: string;
 };
