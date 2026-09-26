@@ -11,7 +11,7 @@ const securityHeaders = [
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ['@hb/ui', '@hb/sdk', '@hb/types'],
+  transpilePackages: ['@hb/ui', '@hb/sdk', '@hb/types', '@hb/auth'],
   images: { formats: ['image/avif', 'image/webp'] },
   experimental: { optimizePackageImports: ['lucide-react'] },
   async headers() {

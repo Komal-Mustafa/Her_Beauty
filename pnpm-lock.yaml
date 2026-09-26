@@ -347,6 +347,9 @@ importers:
       '@hb/types':
         specifier: workspace:*
         version: link:../types
+      '@node-rs/argon2':
+        specifier: 2.2.1
+        version: 2.2.1
       '@types/node':
         specifier: 22.20.4
         version: 22.20.4
