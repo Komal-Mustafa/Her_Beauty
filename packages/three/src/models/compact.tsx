@@ -43,7 +43,7 @@ export function Compact({ shadeHex, lidOpen = 0.8 }: CompactProps) {
           </mesh>
           <mesh position={[0, -0.051, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <circleGeometry args={[R * 0.82, 64]} />
-            <meshStandardMaterial color={COLORS_3D.blush} metalness={1} roughness={0.04} />
+            <meshStandardMaterial color={COLORS_3D.blush} metalness={1} roughness={0.12} />
           </mesh>
         </group>
       </group>

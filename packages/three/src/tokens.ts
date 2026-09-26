@@ -9,7 +9,7 @@ export const COLORS_3D = {
   pinkSoft: '#F8BBD9',
   pinkMist: '#FCE4EF',
   blush: '#FFF5F9',
-  marble: '#FBF7F5',
+  marble: '#F6EDEF',
   night: '#1E0F16',
 } as const;
 

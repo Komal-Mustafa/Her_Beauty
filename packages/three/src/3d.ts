@@ -12,3 +12,4 @@ export { Pedestal } from './models/pedestal';
 export { Studio } from './scene/studio';
 export { GoldDust, Petals } from './scene/particles';
 export { ProductViewer, type ProductViewerProps } from './viewer/product-viewer';
+export { HeroScene, type HeroSceneProps, type HeroProduct } from './hero/hero-scene';
