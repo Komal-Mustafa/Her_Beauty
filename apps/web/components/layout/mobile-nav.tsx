@@ -43,7 +43,7 @@ export function MobileNav({ open, onOpenChange, categories, nav }: MobileNavProp
         <p className="eyebrow mb-2 px-3 text-gold-800">Your account</p>
         <ul>
           <li>
-            <Link href="/account" onClick={close} className={linkClass}>
+            <Link href="/account" prefetch={false} onClick={close} className={linkClass}>
               Account
             </Link>
           </li>
