@@ -4,7 +4,18 @@ import { DiscoveryModule, DiscoveryService, Reflector } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createPrismaClient, uuidv7 } from '@hb/db';
-import { Me, Page, SellerProductRow, SellerProfile, TokenPair } from '@hb/types';
+import {
+  AdPackage,
+  HeroScene,
+  Me,
+  Page,
+  ProductCard,
+  SellerProductRow,
+  SellerProfile,
+  ServedAd,
+  Store,
+  TokenPair,
+} from '@hb/types';
 import { IS_PUBLIC } from '../src/auth/decorators';
 import type { MemoryMessageProvider } from '../src/messaging/message-provider';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -20,6 +31,20 @@ import {
   registerAndVerify,
   uniqueEmail,
 } from './helpers';
+
+/** Every table with a row-level security policy (init migration §7). */
+const RLS_TABLES = [
+  'products',
+  'seller_orders',
+  'shipping_accounts',
+  'shipping_settings',
+  'shipping_rates',
+  'payouts',
+  'ad_subscriptions',
+  'ad_waitlist',
+  'ad_creatives',
+  'ad_campaigns',
+];
 
 /** Default-deny guard, seller scoping (IDOR + RLS), seller applications (docs/b2-auth.md §5). */
 describe.skipIf(!hasDb)('access control', () => {
@@ -247,6 +272,82 @@ describe.skipIf(!hasDb)('access control', () => {
           await db.$executeRawUnsafe('ALTER TABLE products NO FORCE ROW LEVEL SECURITY');
         }
       }
+    });
+  });
+
+  describe('storefront reads under row-level security', () => {
+    /**
+     * Runs `fn` against an app whose queries are subject to RLS, as with the non-owner
+     * `app_user` role in staging/prod. A table owner is subject to RLS once it is forced; a
+     * superuser (CI's database user) never is, so there a second app connects with
+     * `role=<plain role>` in the connection options instead.
+     */
+    async function withRlsEnforced(fn: (target: Api, prisma: PrismaService) => Promise<void>) {
+      const [{ bypassesRls }] = await db.$queryRaw<[{ bypassesRls: boolean }]>`
+        SELECT (rolsuper OR rolbypassrls) AS "bypassesRls" FROM pg_roles WHERE rolname = current_user`;
+      if (!bypassesRls) {
+        for (const t of RLS_TABLES)
+          await db.$executeRawUnsafe(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`);
+        try {
+          await fn(api, app.get(PrismaService));
+        } finally {
+          for (const t of RLS_TABLES) {
+            await db.$executeRawUnsafe(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
+          }
+        }
+        return;
+      }
+      const role = 'hb_rls_reader';
+      await db.$executeRawUnsafe(
+        `DO $$ BEGIN CREATE ROLE ${role} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+      );
+      await db.$executeRawUnsafe(`GRANT USAGE ON SCHEMA public TO ${role}`);
+      await db.$executeRawUnsafe(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${role}`);
+      const ownerUrl = process.env.DATABASE_URL ?? '';
+      const options = `options=${encodeURIComponent(`-c role=${role}`)}`;
+      // Prisma reads DATABASE_URL when it connects (app.init), so swap it only for that.
+      process.env.DATABASE_URL = `${ownerUrl}${ownerUrl.includes('?') ? '&' : '?'}${options}`;
+      let reader: Awaited<ReturnType<typeof createTestApp>> | undefined;
+      try {
+        reader = await createTestApp();
+        process.env.DATABASE_URL = ownerUrl;
+        await fn(new Api(reader.app), reader.app.get(PrismaService));
+      } finally {
+        process.env.DATABASE_URL = ownerUrl;
+        await reader?.app.close();
+        await db.$executeRawUnsafe(`REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM ${role}`);
+        await db.$executeRawUnsafe(`REVOKE USAGE ON SCHEMA public FROM ${role}`);
+      }
+    }
+
+    it('catalogue, ads and CMS reads still return live data (app.role = public_read)', async () => {
+      await withRlsEnforced(async (target, prisma) => {
+        // Control: without a scope RLS hides every product, so the checks below are not vacuous.
+        expect(await prisma.$transaction((tx) => tx.product.count())).toBe(0);
+
+        const products = Page(ProductCard).parse((await target.get('/products').expect(200)).body);
+        expect(products.items.length).toBeGreaterThan(0);
+        expect(products.items.some((p) => p.sponsored)).toBe(true);
+        const slug = products.items[0]?.slug ?? '';
+        await target.get(`/products/${slug}`).expect(200);
+        await target.get(`/products/${slug}/reviews`).expect(200);
+
+        const stores = z.array(Store).parse((await target.get('/stores').expect(200)).body);
+        expect(stores.some((s) => s.productCount > 0)).toBe(true);
+
+        const hero = z
+          .array(ServedAd)
+          .parse((await target.get('/ads/serve?slot=hero').expect(200)).body);
+        expect(hero.length).toBeGreaterThan(0);
+        const scenes = z
+          .array(HeroScene)
+          .parse((await target.get('/cms/hero-scenes').expect(200)).body);
+        expect(scenes.some((s) => s.ad !== null)).toBe(true);
+        const packages = z
+          .array(AdPackage)
+          .parse((await target.get('/ads/packages').expect(200)).body);
+        expect(packages.some((p) => p.seatsTaken > 0)).toBe(true);
+      });
     });
   });
 

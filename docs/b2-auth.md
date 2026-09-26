@@ -118,6 +118,10 @@ only; every TOTP attempt against it counts as a failed login on failure.
 - `PrismaService.withSellerScope(sellerId, fn)` runs `fn(tx)` inside an interactive transaction after
   `SELECT set_config('app.seller_id', $1, true), set_config('app.role', 'seller', true)`. Every seller query
   still has `WHERE seller_id = :tokenSellerId` (RLS is the second lock, security.md §5).
+- `PrismaService.withPlatformScope(role, fn)` does the same with `app.role` only: `admin` for the admin API,
+  `public_read` for every storefront read (catalogue, stores, ads, CMS) that touches an RLS table, so the
+  storefront keeps working when the API connects as the non-owner `app_user` role. The storefront queries
+  still filter to live rows of approved sellers themselves.
 - Client IP comes from Express `req.ip` with `app.set('trust proxy', TRUST_PROXY)` (`TRUST_PROXY` env, default
   `loopback` so a Next.js server on the same host can forward the browser IP in `X-Forwarded-For`).
 - **Audit log** (`audit_logs`): `auth.login` (admin audience, success), `auth.login_failed` (admin audience),

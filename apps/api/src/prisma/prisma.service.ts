@@ -3,8 +3,11 @@ import { PrismaClient, type Prisma } from '@hb/db';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** RLS roles that may read every seller's rows (init migration §7). */
-export type PlatformRole = 'admin' | 'support' | 'finance' | 'system';
+/**
+ * RLS roles that may read every seller's rows (init migration §7). `public_read` is for the
+ * storefront, whose queries still filter to live rows of approved sellers themselves.
+ */
+export type PlatformRole = 'admin' | 'support' | 'finance' | 'system' | 'public_read';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -37,7 +40,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     });
   }
 
-  /** Staff / background reads across all sellers (RLS `app.role` in the platform list). */
+  /**
+   * Staff / background reads across all sellers, and storefront reads (`public_read`): RLS
+   * `app.role` is set for the transaction. Without it a non-owner connection sees no rows.
+   */
   withPlatformScope<T>(
     role: PlatformRole,
     fn: (tx: Prisma.TransactionClient) => Promise<T>,

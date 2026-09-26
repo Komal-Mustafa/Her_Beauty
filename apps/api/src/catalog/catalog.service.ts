@@ -32,6 +32,8 @@ const LIVE = {
   seller: LIVE_SELLER,
 } satisfies Prisma.ProductWhereInput;
 
+type Db = Prisma.TransactionClient;
+
 /** Opaque cursor so clients never depend on its shape. */
 const encodeCursor = (offset: number) => Buffer.from(`o:${offset}`).toString('base64url');
 function decodeCursor(cursor: string | undefined): number {
@@ -44,6 +46,14 @@ function decodeCursor(cursor: string | undefined): number {
 @Injectable()
 export class CatalogService {
   constructor(@Inject(PrismaService) private readonly db: PrismaService) {}
+
+  /**
+   * Reads that touch RLS tables (products, ad_campaigns) run with app.role = 'public_read', so
+   * the storefront also works when the API connects as the non-owner role (docs/b2-auth.md §5).
+   */
+  private publicRead<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
+    return this.db.withPlatformScope('public_read', fn);
+  }
 
   async categories() {
     const rows = await this.db.category.findMany({
@@ -71,9 +81,9 @@ export class CatalogService {
   }
 
   /** Average product rating per seller (weighted by review count). */
-  private async sellerRatings(sellerIds: string[]): Promise<Map<string, number>> {
+  private async sellerRatings(tx: Db, sellerIds: string[]): Promise<Map<string, number>> {
     if (!sellerIds.length) return new Map();
-    const rows = await this.db.product.findMany({
+    const rows = await tx.product.findMany({
       where: { ...LIVE, sellerId: { in: sellerIds } },
       select: { sellerId: true, ratingAvg: true, ratingCount: true },
     });
@@ -90,18 +100,18 @@ export class CatalogService {
   }
 
   /** Product ids promoted by live sponsored-product campaigns (always labelled "Sponsored"). */
-  private async sponsoredIds(): Promise<Set<string>> {
-    const campaigns = await this.db.adCampaign.findMany({
+  private async sponsoredIds(tx: Db): Promise<Set<string>> {
+    const campaigns = await tx.adCampaign.findMany({
       where: { status: 'live' },
       select: { productIds: true },
     });
     return new Set(campaigns.flatMap((c) => c.productIds));
   }
 
-  private async hydrate(rows: ProductRow[]): Promise<Product[]> {
+  private async hydrate(tx: Db, rows: ProductRow[]): Promise<Product[]> {
     const [ratings, sponsored] = await Promise.all([
-      this.sellerRatings([...new Set(rows.map((r) => r.sellerId))]),
-      this.sponsoredIds(),
+      this.sellerRatings(tx, [...new Set(rows.map((r) => r.sellerId))]),
+      this.sponsoredIds(tx),
     ]);
     return rows.map((r) => toProduct(r, ratings.get(r.sellerId) ?? 0, sponsored.has(r.id)));
   }
@@ -127,13 +137,17 @@ export class CatalogService {
       ];
     }
 
-    const rows = await this.db.product.findMany({
-      where,
-      include: productInclude,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: MAX_SCAN,
-    });
-    let list = await this.hydrate(rows);
+    let list = await this.publicRead(async (tx) =>
+      this.hydrate(
+        tx,
+        await tx.product.findMany({
+          where,
+          include: productInclude,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: MAX_SCAN,
+        }),
+      ),
+    );
     // Price lives on variants (cheapest active variant), so range + price sort run after load.
     if (q.minPrice !== undefined) list = list.filter((p) => p.price >= (q.minPrice ?? 0));
     if (q.maxPrice !== undefined) list = list.filter((p) => p.price <= (q.maxPrice ?? 0));
@@ -149,21 +163,24 @@ export class CatalogService {
   }
 
   async product(slug: string): Promise<Product> {
-    const row = await this.db.product.findFirst({
-      where: { ...LIVE, slug },
-      include: productInclude,
+    const [product] = await this.publicRead(async (tx) => {
+      const row = await tx.product.findFirst({
+        where: { ...LIVE, slug },
+        include: productInclude,
+      });
+      return row ? this.hydrate(tx, [row]) : [];
     });
-    if (!row) throw notFound('Product');
-    const [product] = await this.hydrate([row]);
     if (!product) throw notFound('Product');
     return product;
   }
 
   async reviews(productSlug: string) {
-    const product = await this.db.product.findFirst({
-      where: { ...LIVE, slug: productSlug },
-      select: { id: true },
-    });
+    const product = await this.publicRead((tx) =>
+      tx.product.findFirst({
+        where: { ...LIVE, slug: productSlug },
+        select: { id: true },
+      }),
+    );
     if (!product) throw notFound('Product');
     return this.reviewsByProductId(product.id);
   }
@@ -179,23 +196,25 @@ export class CatalogService {
     return rows.map(toReview);
   }
 
-  private async storesWhere(where: Prisma.SellerWhereInput) {
-    const sellers = await this.db.seller.findMany({
-      where: { ...where, ...LIVE_SELLER },
-      select: sellerSelect,
-      orderBy: { storeName: 'asc' },
+  private storesWhere(where: Prisma.SellerWhereInput) {
+    return this.publicRead(async (tx) => {
+      const sellers = await tx.seller.findMany({
+        where: { ...where, ...LIVE_SELLER },
+        select: sellerSelect,
+        orderBy: { storeName: 'asc' },
+      });
+      const ids = sellers.map((s) => s.id);
+      const [ratings, counts] = await Promise.all([
+        this.sellerRatings(tx, ids),
+        tx.product.groupBy({
+          by: ['sellerId'],
+          where: { ...LIVE, sellerId: { in: ids } },
+          _count: { _all: true },
+        }),
+      ]);
+      const countBy = new Map(counts.map((c) => [c.sellerId, c._count._all]));
+      return sellers.map((s) => toStore(s, ratings.get(s.id) ?? 0, countBy.get(s.id) ?? 0));
     });
-    const ids = sellers.map((s) => s.id);
-    const [ratings, counts] = await Promise.all([
-      this.sellerRatings(ids),
-      this.db.product.groupBy({
-        by: ['sellerId'],
-        where: { ...LIVE, sellerId: { in: ids } },
-        _count: { _all: true },
-      }),
-    ]);
-    const countBy = new Map(counts.map((c) => [c.sellerId, c._count._all]));
-    return sellers.map((s) => toStore(s, ratings.get(s.id) ?? 0, countBy.get(s.id) ?? 0));
   }
 
   stores() {
