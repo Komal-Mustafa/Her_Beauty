@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+@import '@hb/config/tailwind/theme.css';
+
+@source '../../../packages/ui/src';
+@source '../../../packages/three/src';
+
+/* Lenis smooth scroll (https://github.com/darkroomengineering/lenis#considerations) */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}

@@ -1,0 +1,24 @@
+import { Button, EmptyState, Logo } from '@hb/ui';
+import Link from 'next/link';
+
+export default function NotFound() {
+  return (
+    <main
+      id="main"
+      className="flex min-h-dvh flex-col items-center justify-center bg-blush-50 px-4"
+    >
+      <Link href="/" aria-label="Her Beauty home" className="mb-4">
+        <Logo />
+      </Link>
+      <EmptyState
+        title="We couldn’t find that page"
+        body="It may have moved, or it’s still being built. Let’s get you back to the shop."
+        action={
+          <Button asChild>
+            <Link href="/">Go to the homepage</Link>
+          </Button>
+        }
+      />
+    </main>
+  );
+}

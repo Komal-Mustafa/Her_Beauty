@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" width="800" height="1000"><defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FCE4EF"/><stop offset="1" stop-color="#F8BBD9"/></linearGradient>
+<linearGradient id="gold" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#B8872E"/><stop offset=".45" stop-color="#E9D18A"/><stop offset=".6" stop-color="#D4AF37"/><stop offset="1" stop-color="#B8872E"/></linearGradient>
+<linearGradient id="pink" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#AD1457"/><stop offset=".5" stop-color="#E75A9B"/><stop offset="1" stop-color="#C2185B"/></linearGradient>
+<radialGradient id="glow" cx=".5" cy=".45" r=".5"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".9"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="800" height="1000" fill="url(#bg)"/><ellipse cx="400" cy="460" rx="330" ry="330" fill="url(#glow)"/>
+<ellipse cx="400" cy="835" rx="210" ry="26" fill="#AD1457" opacity=".08"/><rect x="300" y="480" width="200" height="350" rx="30" fill="#F8BBD9" opacity=".85" stroke="url(#gold)" stroke-width="6"/><rect x="340" y="400" width="120" height="85" fill="url(#gold)"/>
+<rect x="365" y="250" width="70" height="155" rx="35" fill="#2B1A22" opacity=".85"/><rect x="330" y="600" width="140" height="110" rx="6" fill="#FFFFFF" opacity=".8"/></svg>

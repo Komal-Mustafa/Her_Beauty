@@ -1,0 +1,4 @@
+@import 'tailwindcss';
+@import '@hb/config/tailwind/theme.css';
+
+@source '../../../packages/ui/src';
