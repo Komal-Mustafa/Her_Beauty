@@ -52,6 +52,26 @@ type PasswordCheck = 'ok' | 'no_account' | 'locked' | 'wrong' | 'unverified';
 const isVerified = (user: User, id: Identifier) =>
   (id.kind === 'email' ? user.emailVerifiedAt : user.phoneVerifiedAt) !== null;
 
+/**
+ * How an account holds an identifier (docs/b2-auth.md §3): "verified" (its owner proved it),
+ * "unclaimed" (nobody has proven any identifier of the account yet: sign-up not finished) or
+ * "stray" (unverified on an account whose owner proved another one; only in data from before
+ * pending_phone). A stray identifier is never a credential.
+ */
+type Standing = 'verified' | 'unclaimed' | 'stray';
+const standing = (user: User, id: Identifier): Standing => {
+  if (isVerified(user, id)) return 'verified';
+  return user.emailVerifiedAt === null && user.phoneVerifiedAt === null ? 'unclaimed' : 'stray';
+};
+
+/**
+ * Who is proving an address of an unclaimed account, as far as the API can tell:
+ * - "sign_up": the code the sign-up request itself sent, and nobody disputed the sign-up since;
+ * - "resend": a verify code sent again later — possibly to someone who never signed up;
+ * - "someone": a disputed sign-up, a code login or a password reset.
+ */
+type Claimant = 'sign_up' | 'resend' | 'someone';
+
 const isUniqueViolation = (e: unknown) =>
   e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
 
@@ -74,33 +94,39 @@ export class AuthService {
 
   /**
    * Always 202 with the same body, whether or not the address is taken (no enumeration).
+   * Only the primary identifier (the email, else the mobile number) is bound to the account and
+   * gets a message. A mobile number given next to an email is only remembered (`pending_phone`):
+   * it is not an identifier until verified, so it can be neither claimed nor probed here.
    * New account: unverified user (+ draft seller for the seller app) and a verify code.
-   * Taken address: a "someone tried to sign up" notice instead. The password is hashed in both
-   * cases so the response time does not tell them apart either.
+   * Taken address: a "someone tried to sign up" notice instead, and if the account holding it
+   * was never verified its sign-up password is dropped (`dispute`). Exactly one send is recorded
+   * either way and the password is hashed in both cases, so neither the limits nor the response
+   * time tell them apart.
    */
   async register(body: RegisterRequest, client: ClientContext): Promise<VerificationSent> {
-    const ids = this.registrationIdentifiers(body);
-    const primary = ids.find((i) => i.kind === 'email') ?? ids[0];
-    if (!primary) throw validationFailed('email', 'Enter an email address or a mobile number');
-    await this.passwords.assertStrong(body.password, [...ids.map((i) => i.value), body.fullName]);
-    await this.otp.assertCanSend(
-      ids.map((i) => i.value),
-      client.ip,
-    );
+    const { primary, pendingPhone } = this.registrationIdentifiers(body);
+    await this.passwords.assertStrong(body.password, [
+      primary.value,
+      ...(pendingPhone ? [pendingPhone] : []),
+      body.fullName,
+    ]);
+    await this.otp.assertCanSend([primary.value], client.ip);
     const passwordHash = await this.passwords.hash(body.password);
 
-    const taken = await this.takenIdentifiers(ids);
+    // Soft-deleted accounts still hold their address (unique), so they count as taken.
+    const taken = await this.db.user.findFirst({
+      where: identifierWhere(primary),
+      select: { id: true },
+    });
     const created =
-      taken.length === 0 && (await this.createAccount(body, ids, passwordHash, client));
+      !taken && (await this.createAccount(body, primary, pendingPhone, passwordHash, client));
     if (created) {
-      const code = await this.otp.reserve(primary.value, 'verify', client.ip, true);
+      const code = await this.otp.reserve(primary.value, 'verify', client.ip, true, true);
       if (code) await this.otp.deliver(primary, codeMessage('verify', code, OTP_TTL_MIN));
     } else {
-      const notify = taken.length ? taken : await this.takenIdentifiers(ids);
-      for (const id of notify) {
-        await this.otp.reserve(id.value, 'notice', client.ip, false);
-        await this.otp.deliver(id, signUpNotice);
-      }
+      await this.dispute(primary);
+      await this.otp.reserve(primary.value, 'notice', client.ip, false);
+      await this.otp.deliver(primary, signUpNotice);
     }
     return {
       status: 'verification_sent',
@@ -109,35 +135,40 @@ export class AuthService {
     };
   }
 
-  private registrationIdentifiers(body: RegisterRequest): Identifier[] {
-    const ids: Identifier[] = [];
-    if (body.email) {
-      const email = normaliseEmail(body.email);
-      if (!email) throw validationFailed('email', 'Enter a valid email address');
-      ids.push({ kind: 'email', value: email });
+  /** The primary identifier (email, else mobile number) and a mobile number kept for later. */
+  private registrationIdentifiers(body: RegisterRequest): {
+    primary: Identifier;
+    pendingPhone: string | null;
+  } {
+    const email = body.email ? normaliseEmail(body.email) : null;
+    if (body.email && !email) throw validationFailed('email', 'Enter a valid email address');
+    const phone = body.phone ? normalisePhone(body.phone) : null;
+    if (body.phone && !phone) {
+      throw validationFailed('phone', 'Enter a mobile number like 0300 1234567');
     }
-    if (body.phone) {
-      const phone = normalisePhone(body.phone);
-      if (!phone) throw validationFailed('phone', 'Enter a mobile number like 0300 1234567');
-      ids.push({ kind: 'phone', value: phone });
-    }
-    return ids;
+    if (email) return { primary: { kind: 'email', value: email }, pendingPhone: phone };
+    if (phone) return { primary: { kind: 'phone', value: phone }, pendingPhone: null };
+    throw validationFailed('email', 'Enter an email address or a mobile number');
   }
 
-  private async takenIdentifiers(ids: Identifier[]): Promise<Identifier[]> {
-    const rows = await this.db.user.findMany({
-      where: { OR: ids.map(identifierWhere) },
-      select: { email: true, phone: true },
+  /**
+   * Someone else is signing up with an address held by an account that was never verified.
+   * Either of the two may be its real owner, so the password chosen at the first sign-up is no
+   * longer trusted: it is dropped, and whoever proves the address signs in without one
+   * (and sets one with "forgot password"). Stops registration pre-hijacking.
+   */
+  private async dispute(id: Identifier): Promise<void> {
+    await this.db.user.updateMany({
+      where: { ...identifierWhere(id), emailVerifiedAt: null, phoneVerifiedAt: null },
+      data: { passwordHash: null },
     });
-    return ids.filter((i) =>
-      rows.some((r) => (i.kind === 'email' ? r.email === i.value : r.phone === i.value)),
-    );
   }
 
   /** False when the address was taken concurrently (unique violation). */
   private async createAccount(
     body: RegisterRequest,
-    ids: Identifier[],
+    primary: Identifier,
+    pendingPhone: string | null,
     passwordHash: string,
     client: ClientContext,
   ): Promise<boolean> {
@@ -147,8 +178,8 @@ export class AuthService {
         await tx.user.create({
           data: {
             id: userId,
-            email: ids.find((i) => i.kind === 'email')?.value ?? null,
-            phone: ids.find((i) => i.kind === 'phone')?.value ?? null,
+            ...identifierWhere(primary),
+            pendingPhone,
             fullName: body.fullName,
             passwordHash,
             role: body.audience === 'seller' ? 'seller' : 'customer',
@@ -196,10 +227,14 @@ export class AuthService {
     }
     const user = await this.users.findByIdentifier(target);
     const active = user !== null && user.status === 'active';
+    const held = user && standing(user, target);
     // "login": existing accounts, and new numbers/emails (the account is created on verify).
-    // "verify": only accounts that still need this address verified.
+    // "verify": only the address of an account whose sign-up is not finished. A second address
+    // of an established account is never proven here (that would sign its holder in).
     const live =
-      body.purpose === 'login' ? user === null || active : active && !isVerified(user, target);
+      body.purpose === 'login'
+        ? user === null || (active && held !== 'stray')
+        : active && held === 'unclaimed';
     const code = await this.otp.reserve(target.value, body.purpose, client.ip, live);
     if (code) await this.otp.deliver(target, codeMessage(body.purpose, code, OTP_TTL_MIN));
     return CODE_SENT;
@@ -212,12 +247,21 @@ export class AuthService {
       : this.otpVerify(body, target, client);
   }
 
-  /** purpose "verify": completes registration — marks the address verified and logs in. */
+  /**
+   * purpose "verify": finishes a sign-up — marks the address verified and logs in. Only for an
+   * account nobody has verified yet. The sign-up password is kept only with the code the sign-up
+   * sent, while undisputed; a code sent again may reach someone who never signed up.
+   */
   private async otpVerify(body: OtpVerifyRequest, target: Identifier, client: ClientContext) {
-    if (!(await this.otp.checkAndConsume(target.value, 'verify', body.code))) throw invalidCode();
+    const checked = await this.otp.checkAndConsume(target.value, 'verify', body.code);
+    if (!checked) throw invalidCode();
     const found = await this.users.findByIdentifier(target);
-    if (!found || found.status !== 'active') throw invalidCode();
-    const user = await this.markVerified(found, target, false);
+    if (!found || found.status !== 'active' || standing(found, target) !== 'unclaimed') {
+      throw invalidCode();
+    }
+    const undisputed = found.passwordHash !== null;
+    const claimant: Claimant = !undisputed ? 'someone' : checked.signUp ? 'sign_up' : 'resend';
+    const user = await this.claim(found, target, claimant);
     if (!audienceAllows(body.audience, user.role) || this.lockout.isLocked(user)) {
       throw invalidCredentials();
     }
@@ -232,15 +276,17 @@ export class AuthService {
   private async otpLogin(body: OtpVerifyRequest, target: Identifier, client: ClientContext) {
     if (body.audience !== 'web')
       throw forbidden('Sign-in with a code is only available in the shop.');
-    const codeId = await this.otp.check(target.value, 'login', body.code);
-    if (!codeId) throw invalidCode();
+    const checked = await this.otp.check(target.value, 'login', body.code);
+    if (!checked) throw invalidCode();
     const found = await this.users.findByIdentifier(target);
     if (!found && !body.fullName) throw profileRequired();
-    if (!(await this.otp.consume(codeId))) throw invalidCode();
+    if (!(await this.otp.consume(checked.id))) throw invalidCode();
     let user: User;
     if (found) {
       if (found.status !== 'active' || this.lockout.isLocked(found)) throw invalidCredentials();
-      user = await this.markVerified(found, target, true);
+      const held = standing(found, target);
+      if (held === 'stray') throw invalidCredentials();
+      user = held === 'unclaimed' ? await this.claim(found, target, 'someone') : found;
     } else {
       user = await this.createCodeCustomer(target, body.fullName ?? '');
     }
@@ -267,21 +313,34 @@ export class AuthService {
   }
 
   /**
-   * Record that the owner of `target` proved possession of it. On a code login into an account
-   * that had never been verified, the password is dropped: whoever set it never proved they own
-   * the address, and keeping it would let them into the real owner's account (pre-hijacking).
+   * First proof of an address on an unclaimed account (docs/b2-auth.md §3). Unless the prover is
+   * the sign-up's own author (`sign_up`), what the sign-up chose is not trusted: the password,
+   * any 2FA and any session are dropped, and — unless it is a plain `resend` of an undisputed
+   * sign-up — the pending mobile number too. Whoever signs up with somebody else's address
+   * therefore keeps no way in once the real owner proves it (pre-hijacking).
    */
-  private async markVerified(user: User, target: Identifier, codeLogin: boolean): Promise<User> {
-    if (isVerified(user, target)) return user;
-    const neverVerified = user.emailVerifiedAt === null && user.phoneVerifiedAt === null;
+  private async claim(user: User, target: Identifier, claimant: Claimant): Promise<User> {
     const now = new Date();
-    return this.db.user.update({
-      where: { id: user.id },
-      data: {
-        ...(target.kind === 'email' ? { emailVerifiedAt: now } : { phoneVerifiedAt: now }),
-        ...(codeLogin && neverVerified ? { passwordHash: null } : {}),
-      },
+    const verified = target.kind === 'email' ? { emailVerifiedAt: now } : { phoneVerifiedAt: now };
+    if (claimant === 'sign_up') {
+      return this.db.user.update({ where: { id: user.id }, data: verified });
+    }
+    const claimed = await this.db.$transaction(async (tx) => {
+      await tx.twofaBackupCode.deleteMany({ where: { userId: user.id } });
+      return tx.user.update({
+        where: { id: user.id },
+        data: {
+          ...verified,
+          passwordHash: null,
+          twofaSecretEnc: null,
+          twofaEnabledAt: null,
+          twofaLastStep: null,
+          ...(claimant === 'someone' ? { pendingPhone: null } : {}),
+        },
+      });
     });
+    await this.sessions.revokeAll(user.id, 'account_claimed');
+    return claimed;
   }
 
   // ---------- password login ----------
@@ -380,23 +439,32 @@ export class AuthService {
 
   // ---------- password reset ----------
 
-  /** Always 202; a reset code only goes to an existing active account. */
+  /**
+   * Always 202. A reset code only goes to an address an active account's owner proved, or to
+   * the address of an account whose sign-up is not finished (resetting then claims it).
+   */
   async forgotPassword(body: ForgotPasswordRequest, client: ClientContext): Promise<CodeSent> {
     const id = parseIdentifier(body.identifier);
     const user = await this.users.findByIdentifier(id);
-    const live = user !== null && user.status === 'active';
+    const live = user !== null && user.status === 'active' && standing(user, id) !== 'stray';
     const code = await this.otp.reserve(id.value, 'reset', client.ip, live);
     if (code) await this.otp.deliver(id, codeMessage('reset', code, OTP_TTL_MIN));
     return CODE_SENT;
   }
 
-  /** New password, lock cleared, address verified, every session revoked. */
+  /**
+   * New password, lock cleared, address verified, every session revoked. On an account whose
+   * sign-up was not finished this is a claim: what the sign-up chose is dropped first.
+   */
   async resetPassword(body: ResetPasswordRequest, client: ClientContext): Promise<void> {
     const id = parseIdentifier(body.identifier);
     await this.passwords.assertStrong(body.newPassword, [body.identifier, id.value]);
     const valid = await this.otp.checkAndConsume(id.value, 'reset', body.code);
     const user = valid ? await this.users.findByIdentifier(id) : null;
     if (!user || user.status !== 'active') throw invalidCode();
+    const held = standing(user, id);
+    if (held === 'stray') throw invalidCode();
+    if (held === 'unclaimed') await this.claim(user, id, 'someone');
     const passwordHash = await this.passwords.hash(body.newPassword);
     const now = new Date();
     await this.db.user.update({

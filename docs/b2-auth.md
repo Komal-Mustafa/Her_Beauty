@@ -53,9 +53,9 @@ otp/send 5/min, otp/verify 10/min, password/* 5/min, 2fa/challenge 10/min, refre
 
 | Method + path | Auth | What |
 |---|---|---|
-| `POST /auth/register` | public | Create account. Always answers `202 {status:"verification_sent", channel, target}` whether or not the email/phone already exists (no account enumeration). New account: user row (unverified) + verify OTP sent. Existing account: a notice message ("someone tried to sign up with this address — log in or reset your password") is sent instead. `audience:"seller"` also creates a `sellers` row (status `draft`, chosen `type`, `storeName`) + `seller_members` owner row and sets `users.role = 'seller'`. |
-| `POST /auth/otp/send` | public | Send a 6-digit code for `purpose: "login" \| "verify"` to an email or phone. Always `202 {status:"sent", expiresInSec:300}`. `login` codes only go to existing accounts **or** (phone/email not yet registered) create nothing until verify. Limits: max **3 sends per 15 min per target** and **per client IP** ⇒ `429 RATE_LIMITED` with `details.retryAfterSec`. |
-| `POST /auth/otp/verify` | public | Check a code. `purpose:"verify"`: marks email/phone verified and returns a login result (this is how registration completes). `purpose:"login"`: logs in (web audience only). If no account exists for that phone/email yet and `fullName` is absent ⇒ `422 PROFILE_REQUIRED` **without** consuming the code; resubmit with `fullName` to create a customer and log in. |
+| `POST /auth/register` | public | Create account. Always answers `202 {status:"verification_sent", channel, target}` whether or not the email/phone already exists (no account enumeration). Only the **primary** identifier (the email, else the phone) is bound to the account and messaged; a phone given next to an email is kept in `users.pending_phone` (shown in `Me.phone` with `phoneVerified:false`, never an identifier, never messaged, never checked for uniqueness). New account: user row (unverified) + the sign-up's verify OTP. Existing account (including soft-deleted): a notice message ("someone tried to sign up with this address — log in or reset your password") is sent instead, and if that account was never verified the sign-up is **disputed** (its password is dropped, see *Account claims*). Exactly one send is recorded per request either way. `audience:"seller"` also creates a `sellers` row (status `draft`, chosen `type`, `storeName`) + `seller_members` owner row and sets `users.role = 'seller'`. |
+| `POST /auth/otp/send` | public | Send a 6-digit code for `purpose: "login" \| "verify"` to an email or phone. Always `202 {status:"sent", expiresInSec:300}`. `login` codes only go to an active account's verified or unclaimed identifier **or** (phone/email not yet registered) create nothing until verify. `verify` codes only go to the identifier of an active account that is still **unclaimed**. Limits: max **3 sends per 15 min per target** and **per client IP** ⇒ `429 RATE_LIMITED` with `details.retryAfterSec`. |
+| `POST /auth/otp/verify` | public | Check a code. `purpose:"verify"`: claims an unclaimed account — marks the address verified and returns a login result (this is how registration completes); any other account ⇒ `400 INVALID_CODE`. `purpose:"login"`: logs in (web audience only); on an unclaimed account it is a claim. If no account exists for that phone/email yet and `fullName` is absent ⇒ `422 PROFILE_REQUIRED` **without** consuming the code; resubmit with `fullName` to create a customer and log in. |
 | `POST /auth/login` | public | Password login. Result is a `LoginResult` (below). |
 | `POST /auth/2fa/challenge` | public (challenge token) | Finish login with a TOTP code or a backup code. |
 | `POST /auth/2fa/setup` | bearer **or** setup challenge token | Create (or replace a not-yet-enabled) TOTP secret; returns `{secret, otpauthUri}`. Never replaces an enabled secret. |
@@ -66,14 +66,36 @@ otp/send 5/min, otp/verify 10/min, password/* 5/min, 2fa/challenge 10/min, refre
 | `POST /auth/logout-all` | bearer | Revoke every session of the user. `204`. |
 | `GET /auth/sessions` | bearer | List the user's active sessions (current one flagged). |
 | `DELETE /auth/sessions/:id` | bearer | Revoke one of **the caller's own** sessions (`WHERE id = :id AND user_id = :sub`; other users' ids ⇒ 404). |
-| `POST /auth/password/forgot` | public | Sends a `reset` OTP if the account exists. Always `202`. Same send limits as OTP. |
-| `POST /auth/password/reset` | public | `identifier + code + newPassword` ⇒ new hash, clears lock, **revokes all sessions**, audit `auth.password_reset`. |
+| `POST /auth/password/forgot` | public | Sends a `reset` OTP if an active account holds the identifier verified or unclaimed. Always `202`. Same send limits as OTP. |
+| `POST /auth/password/reset` | public | `identifier + code + newPassword` ⇒ new hash, clears lock, **revokes all sessions**, audit `auth.password_reset`. On an unclaimed account it is a claim first. |
 | `GET /me` | bearer | `Me` profile (user, seller membership summary, 2FA state, verification state). |
 | `PATCH /me` | bearer | Update `fullName` only (strict schema; anything else ⇒ 400). |
 | `GET /seller/me` | bearer, aud `seller`, has seller context | The caller's seller: status, type, store name, onboarding step. |
 | `POST /seller/application` | bearer, aud `seller`, **no** seller context yet | Start an application: `{type, storeName}` ⇒ seller draft + owner membership + role `seller`; returns new `TokenPair` (so `sel` appears). `409` if the user already has a seller. |
 | `GET /seller/products` | bearer, aud `seller`, seller context | The caller's own products (all statuses), via `withSellerScope` (RLS second lock). |
 | `GET /admin/overview` | bearer, aud `admin`, role admin-ish, `mfa: true` | Counts: sellers by status, live products, users, orders. Writes nothing. |
+
+### Account claims (who owns an account)
+
+An identifier stands on its account as **verified** (its owner proved it), **unclaimed** (nobody has proven any
+identifier of the account yet: the sign-up is not finished) or **stray** (unverified on an account whose owner
+proved another one — only in rows from before `pending_phone`). A stray identifier is never a credential: no
+login, verify or reset code goes to it, and a code login for it ⇒ `401 INVALID_CREDENTIALS`.
+
+The first proof of an unclaimed account's identifier (verify code, code login, or password reset) **claims** it.
+Who proved it decides what survives from the sign-up:
+- the code the sign-up request itself sent (hashed under its own `sign_up` label), and nobody registered the
+  same address since: everything is kept (the normal sign-up);
+- a `verify` code sent again with `otp/send` on an undisputed sign-up: the password, 2FA and sessions are
+  dropped, the pending phone is kept (unverified) — a resent code may reach someone who never signed up;
+- anything else (a disputed sign-up, a code login, a password reset): password, 2FA, sessions **and** the
+  pending phone are dropped.
+
+The claimant signs in without a password and sets one with "forgot password". Sessions are revoked with
+reason `account_claimed`. So whoever signs up with somebody else's address or number keeps no way in once the
+real owner proves it (registration pre-hijacking), and a number typed at sign-up can neither be verified into
+the account nor used to sign in to it. Verifying a second identifier of an established account needs a
+signed-in flow (later phase).
 
 ### LoginResult (discriminated on `status`)
 - `{status:"ok", tokens: TokenPair, user: Me}`
@@ -162,6 +184,8 @@ Follow-up migrations (B2 fixes):
   rows stay NULL, which counts as revoked on purpose.
 - `20260926160100_b2_challenge_single_use`: unique partial index `otp_codes (code_hash) WHERE purpose =
   'challenge'` (spent challenge tokens).
+- `20260926160200_b2_pending_phone`: `users.pending_phone text` (not unique). Backfill: an unverified phone on
+  an account that also has an email moves from `phone` to `pending_phone`.
 
 ## 7. Next.js apps (BFF — tokens never reach browser JavaScript)
 

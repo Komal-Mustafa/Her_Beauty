@@ -28,7 +28,8 @@ function toMe(user: UserWithMembership): Me {
     id: user.id,
     fullName: user.fullName,
     email: user.email,
-    phone: user.phone,
+    // A number given at sign-up next to an email shows as unverified until it is verified.
+    phone: user.phone ?? user.pendingPhone,
     emailVerified: user.emailVerifiedAt !== null,
     phoneVerified: user.phoneVerifiedAt !== null,
     role: user.role,

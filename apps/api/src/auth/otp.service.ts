@@ -21,6 +21,15 @@ const CODE_DIGITS = 6;
 export type StoredPurpose = 'login' | 'verify' | 'reset' | 'notice' | 'challenge';
 
 /**
+ * A code that matched. `signUp`: the "verify" code sent by the sign-up request itself (hashed
+ * under its own label), as opposed to one sent again later with otp/send (docs/b2-auth.md §3).
+ */
+export interface CheckedCode {
+  id: string;
+  signUp: boolean;
+}
+
+/**
  * One-time codes (docs/b2-auth.md §4): 6 digits, HMAC-SHA256(OTP_PEPPER, purpose|target|code)
  * at rest, 5-minute expiry, 3 tries, single use, newest code wins. Every outbound auth message
  * — including the ones we decide not to send — records one row, so the per-target and per-IP
@@ -34,8 +43,8 @@ export class OtpService {
     @Inject(MESSAGE_PROVIDER) private readonly messages: MessageProvider,
   ) {}
 
-  private hash(purpose: StoredPurpose, target: string, code: string): string {
-    return hmacSha256Hex(this.config.otpPepper, `${purpose}|${target}|${code}`);
+  private hash(label: StoredPurpose | 'sign_up', target: string, code: string): string {
+    return hmacSha256Hex(this.config.otpPepper, `${label}|${target}|${code}`);
   }
 
   /** 429 RATE_LIMITED (with details.retryAfterSec) when any target or the IP is over the limit. */
@@ -67,13 +76,15 @@ export class OtpService {
   /**
    * Check the limits and record one send for `target`. With `live` a fresh code replaces any
    * older unused code for the same target + purpose and is returned; otherwise a dead row is
-   * written (it can never be verified) and null is returned.
+   * written (it can never be verified) and null is returned. `signUp` marks the "verify" code
+   * sent by a sign-up request (see CheckedCode).
    */
   async reserve(
     target: string,
     purpose: StoredPurpose,
     ip: string | null,
     live: boolean,
+    signUp = false,
   ): Promise<string | null> {
     const code = live ? randomDigits(CODE_DIGITS) : null;
     const now = new Date();
@@ -93,7 +104,7 @@ export class OtpService {
           id: uuidv7(),
           target,
           purpose,
-          codeHash: this.hash(purpose, target, code ?? randomToken(24)),
+          codeHash: this.hash(signUp ? 'sign_up' : purpose, target, code ?? randomToken(24)),
           expiresAt: new Date(now.getTime() + OTP_TTL_SEC * 1000),
           usedAt: code ? null : now,
           requestIp: ip,
@@ -105,9 +116,9 @@ export class OtpService {
 
   /**
    * Check a code without consuming it. A wrong code uses up one of the three tries of the
-   * newest live code. Returns the row id to pass to `consume`.
+   * newest live code. Returns the row id (to pass to `consume`) and whether it is a sign-up code.
    */
-  async check(target: string, purpose: StoredPurpose, code: string): Promise<string | null> {
+  async check(target: string, purpose: StoredPurpose, code: string): Promise<CheckedCode | null> {
     const row = await this.db.otpCode.findFirst({
       where: {
         target,
@@ -120,7 +131,12 @@ export class OtpService {
       select: { id: true, codeHash: true },
     });
     if (!row) return null;
-    if (safeEqual(row.codeHash, this.hash(purpose, target, code))) return row.id;
+    if (safeEqual(row.codeHash, this.hash(purpose, target, code))) {
+      return { id: row.id, signUp: false };
+    }
+    if (purpose === 'verify' && safeEqual(row.codeHash, this.hash('sign_up', target, code))) {
+      return { id: row.id, signUp: true };
+    }
     await this.db.otpCode.updateMany({
       where: { id: row.id, attempts: { lt: OTP_MAX_ATTEMPTS } },
       data: { attempts: { increment: 1 } },
@@ -142,9 +158,13 @@ export class OtpService {
     return res.count === 1;
   }
 
-  async checkAndConsume(target: string, purpose: StoredPurpose, code: string): Promise<boolean> {
-    const id = await this.check(target, purpose, code);
-    return id !== null && (await this.consume(id));
+  async checkAndConsume(
+    target: string,
+    purpose: StoredPurpose,
+    code: string,
+  ): Promise<CheckedCode | null> {
+    const checked = await this.check(target, purpose, code);
+    return checked && (await this.consume(checked.id)) ? checked : null;
   }
 
   /** Has this challenge token (by jti) already completed a sign-in? */

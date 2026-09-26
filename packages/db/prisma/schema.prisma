@@ -310,6 +310,9 @@ model User {
   email           String?    @unique
   /// E.164, e.g. +923001234567
   phone           String?    @unique
+  /// E.164 number given at sign-up next to an email: not an identifier until verified
+  /// (not unique, no codes, no sign-in; docs/b2-auth.md §3)
+  pendingPhone    String?    @map("pending_phone")
   /// Argon2id; null for OTP-only customers
   passwordHash    String?    @map("password_hash")
   /// CHECK length(full_name) <= 120 (migration SQL)
