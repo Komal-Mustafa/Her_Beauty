@@ -13,6 +13,19 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hb
+          POSTGRES_PASSWORD: hb
+          POSTGRES_DB: herbeauty
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U hb -d herbeauty"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hb:hb@localhost:5432/herbeauty
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,6 +34,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Migrate + seed database
+        run: pnpm --filter @hb/db migrate:deploy && pnpm --filter @hb/db seed
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

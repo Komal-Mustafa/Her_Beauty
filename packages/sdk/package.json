@@ -5,14 +5,17 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./format": "./src/format.ts"
+    "./format": "./src/format.ts",
+    "./fixtures": "./src/mock/fixtures.ts"
   },
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@hb/types": "workspace:*" },
+  "dependencies": {
+    "@hb/types": "workspace:*"
+  },
   "devDependencies": {
     "@hb/config": "workspace:*",
     "eslint": "9.39.5",

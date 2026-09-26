@@ -1,0 +1,36 @@
+{
+  "name": "@hb/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "postinstall": "prisma generate",
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "tsx prisma/seed.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
+  },
+  "devDependencies": {
+    "@hb/config": "workspace:*",
+    "@hb/sdk": "workspace:*",
+    "@hb/types": "workspace:*",
+    "@types/node": "22.20.4",
+    "eslint": "9.39.5",
+    "prisma": "6.19.3",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

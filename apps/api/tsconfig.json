@@ -1,0 +1,11 @@
+{
+  "extends": "@hb/config/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    // NestJS uses legacy decorators. Dependencies are injected with explicit @Inject(Token),
+    // so no emitDecoratorMetadata is needed and tsx/vitest (esbuild) can run the source directly.
+    "experimentalDecorators": true
+  },
+  "include": ["src", "test"]
+}
