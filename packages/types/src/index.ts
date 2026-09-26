@@ -4,3 +4,4 @@ export * from './ads';
 export * from './orders';
 export * from './plans';
 export * from './nav';
+export * from './auth';
