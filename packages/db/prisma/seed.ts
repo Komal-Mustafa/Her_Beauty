@@ -10,6 +10,13 @@
  *
  * Seeded orders exist only so reviews can be "verified purchases" (rules.md §5). They are demo
  * history: no payments or ledger postings are created for them. Never run this in production.
+ *
+ * Demo sign-in (docs/b2-auth.md §8): with SEED_DEMO_PASSWORD set, the store owners
+ * (owner@<slug>.test), the two customers (ayesha@hb.test, sana@hb.test) and the super admin
+ * (SEED_ADMIN_EMAIL) get that password; unset, they have none (code sign-in only). There is no
+ * default password in code. Re-running with SEED_DEMO_PASSWORD on an already seeded database
+ * (re)applies it to those accounts. The super admin has no 2FA, so the first admin sign-in walks
+ * through enrolment.
  */
 import {
   adPackages,
@@ -24,7 +31,9 @@ import {
   stores,
 } from '@hb/sdk/fixtures';
 import type { AdSlotCode } from '@hb/types';
+import { hash, type Algorithm } from '@node-rs/argon2';
 import { PrismaClient, type Prisma } from '@prisma/client';
+import { PASSWORD_HASH_PARAMS } from '../src/password-params';
 import { uuidv7 } from '../src/uuid';
 
 const DAY = 86_400_000;
@@ -32,6 +41,31 @@ const BOOKING_DAYS_BEFORE = 1;
 const BOOKING_DAYS_AFTER = 90;
 
 const log = (msg: string) => process.stdout.write(`[seed] ${msg}\n`);
+
+/** Demo customers: review author ⇒ account (docs/b2-auth.md §8). */
+const DEMO_CUSTOMERS: Record<string, { fullName: string; email: string }> = {
+  'Ayesha K.': { fullName: 'Ayesha Khan', email: 'ayesha@hb.test' },
+  'Sana R.': { fullName: 'Sana Riaz', email: 'sana@hb.test' },
+};
+
+/** Argon2id hash of SEED_DEMO_PASSWORD (same parameters as the API), or null when unset. */
+async function demoPasswordHash(): Promise<string | null> {
+  const password = process.env.SEED_DEMO_PASSWORD;
+  if (!password) return null;
+  if (password.length < 8) {
+    throw new Error('seed: SEED_DEMO_PASSWORD must be at least 8 characters');
+  }
+  return hash(password, {
+    ...PASSWORD_HASH_PARAMS,
+    algorithm: PASSWORD_HASH_PARAMS.algorithm as Algorithm,
+  });
+}
+
+/**
+ * Set once in main(): hash of SEED_DEMO_PASSWORD, or null (demo accounts get no password).
+ * Seeded addresses count as verified — they are demo data — so password sign-in works.
+ */
+let passwordHash: string | null = null;
 
 /** Stable fixture id → UUIDv7 map for this run. */
 const ids = new Map<string, string>();
@@ -114,14 +148,28 @@ async function seedReferenceData(db: Prisma.TransactionClient) {
     })),
   });
 
-  const adminEmail = process.env.SEED_ADMIN_EMAIL;
-  if (adminEmail) {
-    // No password: the admin sets one through the reset flow; 2FA is forced on first login.
-    await db.user.create({
-      data: { id: uuidv7(), email: adminEmail, fullName: 'Super Admin', role: 'super_admin' },
-    });
-    log(`super admin created for ${adminEmail}`);
-  }
+  await ensureSuperAdmin(db);
+}
+
+/**
+ * Super admin from SEED_ADMIN_EMAIL. Without SEED_DEMO_PASSWORD it has no password (set one
+ * through "forgot password"); 2FA is never pre-enabled, so the first admin sign-in enrols.
+ */
+async function ensureSuperAdmin(db: Prisma.TransactionClient) {
+  const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  if (!adminEmail) return;
+  if (await db.user.findUnique({ where: { email: adminEmail } })) return;
+  await db.user.create({
+    data: {
+      id: uuidv7(),
+      email: adminEmail,
+      fullName: 'Super Admin',
+      role: 'super_admin',
+      passwordHash,
+      emailVerifiedAt: new Date(),
+    },
+  });
+  log(`super admin created for ${adminEmail}`);
 }
 
 async function seedCatalogue(db: Prisma.TransactionClient) {
@@ -151,6 +199,7 @@ async function seedCatalogue(db: Prisma.TransactionClient) {
         email: `owner@${s.slug}.test`,
         fullName: `${s.storeName} Owner`,
         role: 'seller',
+        passwordHash,
         emailVerifiedAt: approvedAt,
       },
     });
@@ -264,20 +313,23 @@ async function seedCatalogue(db: Prisma.TransactionClient) {
 async function seedReviews(db: Prisma.TransactionClient) {
   const byAuthor = new Map<string, typeof reviews>();
   for (const r of reviews) byAuthor.set(r.authorName, [...(byAuthor.get(r.authorName) ?? []), r]);
-  const surnames: Record<string, string> = { 'Ayesha K.': 'Ayesha Khan', 'Sana R.': 'Sana Riaz' };
   const productById = new Map(products.map((p) => [p.id, p]));
   const plans = new Map(sellingPlans.map((p) => [p.code, p.commissionBps]));
   let orderNo = 1;
 
   for (const [author, list] of byAuthor) {
     const customerId = uuidv7();
-    const fullName = surnames[author] ?? author;
+    const demo = DEMO_CUSTOMERS[author];
+    const fullName = demo?.fullName ?? author;
     await db.user.create({
       data: {
         id: customerId,
-        email: `${fullName.toLowerCase().replace(/\s+/g, '.')}@customer.test`,
+        email: demo?.email ?? `${fullName.toLowerCase().replace(/\s+/g, '.')}@customer.test`,
         phone: `+9230000000${String(orderNo).padStart(2, '0')}`,
         fullName,
+        passwordHash,
+        emailVerifiedAt: new Date(),
+        phoneVerifiedAt: new Date(),
       },
     });
 
@@ -493,14 +545,36 @@ async function seedAds(db: Prisma.TransactionClient) {
   );
 }
 
+/** Already seeded: (re)apply SEED_DEMO_PASSWORD to the demo accounts and add a missing admin. */
+async function refreshDemoAccounts(db: PrismaClient) {
+  await ensureSuperAdmin(db);
+  if (!passwordHash) return;
+  const emails = [
+    ...stores.map((s) => `owner@${s.slug}.test`),
+    ...Object.values(DEMO_CUSTOMERS).map((c) => c.email),
+    ...(process.env.SEED_ADMIN_EMAIL ? [process.env.SEED_ADMIN_EMAIL.trim().toLowerCase()] : []),
+  ];
+  const updated = await db.user.updateMany({
+    where: { email: { in: emails }, deletedAt: null },
+    data: { passwordHash, failedLogins: 0, lockedUntil: null },
+  });
+  await db.user.updateMany({
+    where: { email: { in: emails }, emailVerifiedAt: null },
+    data: { emailVerifiedAt: new Date() },
+  });
+  log(`demo password applied to ${updated.count} accounts`);
+}
+
 async function main() {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('seed: refusing to run with NODE_ENV=production');
   }
   const db = new PrismaClient();
   try {
+    passwordHash = await demoPasswordHash();
     if ((await db.category.count()) > 0) {
-      log('catalogue already present — nothing to do');
+      await refreshDemoAccounts(db);
+      log('catalogue already present — nothing else to do');
       return;
     }
     await db.$transaction(
