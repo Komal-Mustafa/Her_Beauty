@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@hb/types": "workspace:*" },
+  "dependencies": {
+    "@hb/types": "workspace:*"
+  },
   "devDependencies": {
     "@hb/config": "workspace:*",
     "eslint": "9.39.5",

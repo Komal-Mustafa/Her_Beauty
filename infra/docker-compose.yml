@@ -1,0 +1,39 @@
+# Local services for the API (docs/06-implementation-plan.md Sprint 0).
+# Usage: docker compose -f infra/docker-compose.yml up -d
+# Dev-only credentials — never reuse outside your machine (rules.md §1.7).
+name: herbeauty
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hb
+      POSTGRES_PASSWORD: hb
+      POSTGRES_DB: herbeauty
+    ports: ['5432:5432']
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hb -d herbeauty']
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    environment:
+      MEILI_MASTER_KEY: dev-master-key-change-me
+      MEILI_ENV: development
+    ports: ['7700:7700']
+    volumes: [meili:/meili_data]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: hbminio
+      MINIO_ROOT_PASSWORD: hbminio-dev-secret
+    ports: ['9000:9000', '9001:9001']
+    volumes: [minio:/data]
+volumes:
+  pgdata:
+  meili:
+  minio:
