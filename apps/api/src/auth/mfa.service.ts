@@ -68,9 +68,11 @@ export class MfaService {
     const challenge = await this.fromChallenge(body.challengeToken, 'mfa');
     const { user, audience } = challenge;
     if (!user.twofaEnabledAt) throw invalidCredentials();
-    if (!(await this.twoFactor.verifySecondFactor(user, body.code))) {
-      await this.failSecondFactor(user, audience, client);
-    }
+    const result = await this.lockout.attempt(user, client, async () =>
+      (await this.twoFactor.verifySecondFactor(user, body.code)) ? true : null,
+    );
+    if (result.status === 'locked') throw invalidCredentials();
+    if (result.status === 'failed') await this.failSecondFactor(user, audience, client);
     await this.useChallenge(challenge);
     return this.signIn.finish(user, audience, client, true);
   }
@@ -90,16 +92,20 @@ export class MfaService {
     client: ClientContext,
   ): Promise<TwoFactorEnabled> {
     const actor = await this.actor(body.challengeToken, auth);
-    const backupCodes = await this.twoFactor.enable(actor.user, body.code, client);
-    if (!backupCodes) {
-      if (actor.via === 'challenge')
-        await this.failSecondFactor(actor.user, actor.audience, client);
-      throw invalidCode();
-    }
+    const enable = () => this.twoFactor.enable(actor.user, body.code, client);
     if (actor.via === 'bearer') {
+      const backupCodes = await enable();
+      if (!backupCodes) throw invalidCode();
       await this.sessions.markMfa(actor.auth.sessionId);
       return { backupCodes };
     }
+    // Half-way through a sign-in, a wrong first code counts as a failed login.
+    const result = await this.lockout.attempt(actor.user, client, enable);
+    if (result.status === 'locked') throw invalidCredentials();
+    if (result.status === 'failed') {
+      return this.failSecondFactor(actor.user, actor.audience, client);
+    }
+    const backupCodes = result.value;
     await this.useChallenge(actor);
     const login = await this.signIn.finish(actor.user, actor.audience, client, true);
     return { backupCodes, login };
@@ -117,17 +123,17 @@ export class MfaService {
       throw forbidden('Admin accounts must keep two-factor authentication on.');
     }
     if (!user.twofaEnabledAt) throw conflict('Two-factor authentication is not on.');
-    if (this.lockout.isLocked(user)) throw invalidCredentials();
-    const passwordOk =
-      user.passwordHash !== null && (await this.passwords.verify(user.passwordHash, body.password));
-    if (!passwordOk) {
-      await this.lockout.recordFailure(user, client);
-      throw invalidCredentials();
-    }
-    if (!(await this.twoFactor.verifySecondFactor(user, body.code))) {
-      await this.lockout.recordFailure(user, client);
-      throw invalidCode();
-    }
+    const hash = user.passwordHash;
+    if (this.lockout.isLocked(user) || !hash) throw invalidCredentials();
+    const password = await this.lockout.attempt(user, client, async () =>
+      (await this.passwords.verify(hash, body.password)) ? true : null,
+    );
+    if (password.status !== 'ok') throw invalidCredentials();
+    const code = await this.lockout.attempt(user, client, async () =>
+      (await this.twoFactor.verifySecondFactor(user, body.code)) ? true : null,
+    );
+    if (code.status === 'locked') throw invalidCredentials();
+    if (code.status === 'failed') throw invalidCode();
     await this.twoFactor.disable(user, client);
   }
 
@@ -169,12 +175,12 @@ export class MfaService {
     if (!(await this.otp.useChallenge(c.user.id, c.jti, c.expiresAt))) throw expiredChallenge();
   }
 
+  /** Audit a wrong second factor during an admin sign-in (already counted by `attempt`). */
   private async failSecondFactor(
     user: User,
     audience: AuthAudience,
     client: ClientContext,
   ): Promise<never> {
-    await this.lockout.recordFailure(user, client);
     if (audience === 'admin') {
       await this.audit.record({
         action: 'auth.login_failed',

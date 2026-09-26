@@ -200,6 +200,23 @@ describe.skipIf(!hasDb)('auth: two-factor and admin access', () => {
     expect((await db.user.findUniqueOrThrow({ where: { email } })).failedLogins).toBe(5);
   });
 
+  it('parallel wrong codes on one challenge get 5 checks per lock', async () => {
+    const email = uniqueEmail('totpburst');
+    const login = await registerAndVerify(api, outbox, { audience: 'web', email });
+    const token = login.tokens.accessToken;
+    const { secret } = TwoFactorSetup.parse(
+      (await api.post('/auth/2fa/setup', {}, { token }).expect(200)).body,
+    );
+    await api.post('/auth/2fa/enable', { code: totp(secret) }, { token }).expect(200);
+    const ct = challengeTokenOf((await passwordLogin(api, email).expect(200)).body, 'mfa_required');
+    // The right password gave its reserved slot back: nothing counted yet.
+    expect((await db.user.findUniqueOrThrow({ where: { email } })).failedLogins).toBe(0);
+    const burst = await Promise.all(Array.from({ length: 20 }, () => challenge(ct, 'AAAAA-AAAAA')));
+    expect(burst.filter((r) => r.status === 400)).toHaveLength(5);
+    expect(burst.filter((r) => r.status === 401)).toHaveLength(15);
+    expect((await db.user.findUniqueOrThrow({ where: { email } })).failedLogins).toBe(5);
+  });
+
   it('admin: first login enrols 2FA, later logins need the code, and /admin/overview works', async () => {
     const { email, user } = await createAdmin();
     const setupCt = challengeTokenOf(

@@ -305,18 +305,21 @@ export class AuthService {
     password: string,
     client: ClientContext,
   ): Promise<PasswordCheck> {
-    if (!user || !user.passwordHash || user.status !== 'active') {
+    const hash = user?.passwordHash;
+    if (!user || !hash || user.status !== 'active') {
       await this.passwords.verifyDummy(password);
       return 'no_account';
     }
-    if (this.lockout.isLocked(user)) {
+    const result = this.lockout.isLocked(user)
+      ? ({ status: 'locked' } as const)
+      : await this.lockout.attempt(user, client, async () =>
+          (await this.passwords.verify(hash, password)) ? true : null,
+        );
+    if (result.status === 'locked') {
       await this.passwords.verifyDummy(password);
       return 'locked';
     }
-    if (!(await this.passwords.verify(user.passwordHash, password))) {
-      await this.lockout.recordFailure(user, client);
-      return 'wrong';
-    }
+    if (result.status === 'failed') return 'wrong';
     // A password only works with an address its owner has proven (registration completes on verify).
     return isVerified(user, id) ? 'ok' : 'unverified';
   }

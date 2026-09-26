@@ -254,6 +254,38 @@ describe.skipIf(!hasDb)('auth: register, login, codes', () => {
       expect(reset.lockedUntil).toBeNull();
     });
 
+    it('parallel guesses from many IPs get 5 checks per lock, not one per request in flight', async () => {
+      const email = uniqueEmail('burst');
+      await registerAndVerify(api, outbox, { audience: 'web', email });
+      const burst = await Promise.all(
+        Array.from({ length: 20 }, (_, i) =>
+          passwordLogin(api, email, 'web', `Wrong-Password-${i}`),
+        ),
+      );
+      expect(burst.every((r) => r.status === 401)).toBe(true);
+      const user = await db.user.findUniqueOrThrow({ where: { email } });
+      expect(user.failedLogins).toBe(5);
+      expect(user.lockedUntil?.getTime()).toBeGreaterThan(Date.now() + 50_000);
+      expect(outbox.to(email).filter((m) => /locked/.test(m.subject ?? ''))).toHaveLength(1);
+      expect(await db.auditLog.count({ where: { action: 'auth.locked', actorId: user.id } })).toBe(
+        1,
+      );
+      // Locked: even the right password is refused, and nothing more is counted.
+      await passwordLogin(api, email).expect(401);
+      expect((await db.user.findUniqueOrThrow({ where: { email } })).failedLogins).toBe(5);
+    });
+
+    it('a right password in a burst does not keep the lock its own check reserved', async () => {
+      const email = uniqueEmail('burstok');
+      await registerAndVerify(api, outbox, { audience: 'web', email });
+      await db.user.update({ where: { email }, data: { failedLogins: 4 } });
+      // The right password takes the 5th slot (which locks until it is checked), then gives it back.
+      await passwordLogin(api, email).expect(200);
+      const after = await db.user.findUniqueOrThrow({ where: { email } });
+      expect(after.failedLogins).toBe(0);
+      expect(after.lockedUntil).toBeNull();
+    });
+
     it('asks an IP for a CAPTCHA after 5 failed logins (flag by IP, not by account)', async () => {
       const email = uniqueEmail('captcha');
       await registerAndVerify(api, outbox, { audience: 'web', email });

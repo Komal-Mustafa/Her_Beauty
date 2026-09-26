@@ -114,7 +114,10 @@ only one of two racing requests finish. A spent token answers `401 UNAUTHENTICAT
 - **Lockout**: each failed password or 2FA attempt increments `users.failed_logins`. From the 5th consecutive
   failure the account is locked for `min(2^(n-5), 60)` minutes (`locked_until`), and a lock notice is sent once
   per lock. While locked, login answers the **same** `401 INVALID_CREDENTIALS` without checking the password.
-  Success resets the counter.
+  Success resets the counter. Each attempt is counted **before** the password or code is checked
+  (`SELECT … FOR UPDATE` on the user row, then increment, and set `locked_until` at once when this attempt reaches
+  the threshold); a right password or code gives its slot back. So parallel guesses get at most 5 checks per lock
+  and one lock notice, however many are in flight.
 - **CAPTCHA**: `CaptchaService` verifies Cloudflare Turnstile when `TURNSTILE_SECRET_KEY` is set. It becomes
   required for an IP after 5 failed logins in 15 minutes (in-memory window; Redis later). Missing/invalid ⇒
   `401 INVALID_CREDENTIALS` with `details.captchaRequired: true` — the flag is set by IP, never by account, so it
