@@ -10,7 +10,7 @@ import {
   type StorefrontStats,
 } from '@hb/types';
 import { featuredBrandLevel } from '../ads/ads.service';
-import { LIVE, LIVE_SELLER } from '../catalog/catalog.service';
+import { LIVE, LIVE_SELLER, VISIBLE_BRAND } from '../catalog/catalog.service';
 import { toBrand, toReview } from '../catalog/mappers';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -43,12 +43,7 @@ export class StorefrontService {
         Promise.all([
           tx.seller.count({ where: LIVE_SELLER }),
           // A protected brand of a suspended manufacturer is not counted while it is hidden.
-          tx.brand.count({
-            where: {
-              isProtected: true,
-              OR: [{ ownerSellerId: null }, { ownerSeller: LIVE_SELLER }],
-            },
-          }),
+          tx.brand.count({ where: { isProtected: true, ...VISIBLE_BRAND } }),
           tx.product.count({ where: LIVE }),
           tx.sellerOrder.count({ where: { status: { in: DELIVERED } } }),
         ]),

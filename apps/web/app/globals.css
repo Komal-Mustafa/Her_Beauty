@@ -5,6 +5,14 @@
 @source '../../../packages/auth/src/client';
 @source '../../../packages/three/src';
 
+/*
+ * The site header is sticky (80 px, 64 px once scrolled): scrolling that the browser does to show
+ * a focused element or an anchor stops below it (WCAG 2.2 2.4.11 focus not obscured).
+ */
+html {
+  scroll-padding-top: 6rem;
+}
+
 /* Lenis smooth scroll (https://github.com/darkroomengineering/lenis#considerations) */
 html.lenis,
 html.lenis body {

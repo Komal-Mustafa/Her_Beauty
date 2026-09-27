@@ -32,7 +32,7 @@ export function SidebarAd3D({ ads, variant, className }: SidebarAdProps) {
   // checked too, so switching it on mid-visit drops back to the poster.
   const webgl = (tier === 'high' || tier === 'mid') && !rotation.reducedMotion && hasModels;
   const near = useNearViewport(rotation.bind.ref, webgl);
-  const live = useIdle(near) && webgl;
+  const live = useMountWhenIdle(rotation.bind.ref, near) && webgl;
 
   const [ready, setReady] = useState(false);
   const [shown, setShown] = useState(0);
@@ -128,29 +128,38 @@ export function SidebarAd3D({ ads, variant, className }: SidebarAdProps) {
   );
 }
 
-/** True (and stays true) once `ref` comes within ~one screen of the viewport. */
+/** Whether `ref` is within half a screen of the viewport, kept up to date as it moves. */
 function useNearViewport(ref: RefObject<HTMLElement | null>, enabled: boolean): boolean {
   const [near, setNear] = useState(false);
   useEffect(() => {
     const el = ref.current;
-    if (!enabled || near || !el) return;
-    const io = new IntersectionObserver(([entry]) => entry?.isIntersecting && setNear(true), {
+    if (!enabled || !el) return;
+    const io = new IntersectionObserver(([entry]) => setNear(entry?.isIntersecting ?? false), {
       rootMargin: '50% 0px',
     });
     io.observe(el);
     return () => io.disconnect();
-  }, [ref, enabled, near]);
+  }, [ref, enabled]);
   return near;
 }
 
-/** True once the browser has been idle after `start` turned true, so WebGL never delays LCP. */
-function useIdle(start: boolean): boolean {
-  const [idle, setIdle] = useState(false);
+/**
+ * True (and stays true: TieredCanvas already stops drawing off screen) once the card is near the
+ * viewport at a moment the browser is idle, so WebGL never delays LCP. The position is checked
+ * again when idle comes: on first load the cinematic hero replaces its short fallback and pushes
+ * the card thousands of pixels down, after the observer first saw it near.
+ */
+function useMountWhenIdle(ref: RefObject<HTMLElement | null>, near: boolean): boolean {
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    if (!start || idle) return;
+    if (!near || mounted) return;
     const ric = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 200));
-    const id = ric(() => setIdle(true));
+    const id = ric(() => {
+      const rect = ref.current?.getBoundingClientRect();
+      const margin = window.innerHeight / 2;
+      if (rect && rect.top < window.innerHeight + margin && rect.bottom > -margin) setMounted(true);
+    });
     return () => (window.cancelIdleCallback ?? window.clearTimeout)(id);
-  }, [start, idle]);
-  return idle;
+  }, [ref, near, mounted]);
+  return mounted;
 }

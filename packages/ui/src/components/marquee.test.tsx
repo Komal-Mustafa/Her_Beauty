@@ -183,6 +183,24 @@ describe('Marquee loop', () => {
     expect(itemLeft(0) + ITEM + RING).toBeLessThanOrEqual(WIDTH - FADE);
   });
 
+  it('keeps the first item in view when its rect is a hair left of the loop start', () => {
+    renderMarquee();
+    // Real layout rects carry float noise; a tiny negative offset must not wrap a whole copy.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      const list = screen.getByRole('list', { name: 'Official brands' });
+      const index = Array.from(list.children).indexOf(this);
+      const noise = index === 0 ? -1e-6 : 0;
+      return index < 0
+        ? DOMRect.fromRect({ x: 0, y: 0, width: WIDTH, height: 112 })
+        : DOMRect.fromRect({ x: itemLeft(index) + noise, y: 8, width: ITEM, height: 96 });
+    });
+    fireEvent.focus(link('Glow'));
+    expect(itemLeft(0) - RING).toBeGreaterThanOrEqual(FADE);
+    expect(itemLeft(0) + ITEM + RING).toBeLessThanOrEqual(WIDTH - FADE);
+  });
+
   it('brings an item out of the right-hand fade the same way', () => {
     renderMarquee();
     // Luxe (750–950) ends inside the right fade (920–1000).

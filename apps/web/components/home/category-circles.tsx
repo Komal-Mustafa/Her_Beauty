@@ -43,7 +43,7 @@ export function CategoryCircles({ categories }: { categories: readonly Category[
                   pathLength={1}
                   strokeDasharray="1"
                   strokeDashoffset="1"
-                  className="transition-[stroke-dashoffset] duration-cinema ease-soft group-hover:[stroke-dashoffset:0] group-focus-visible:[stroke-dashoffset:0] motion-reduce:transition-none"
+                  className="transition-[stroke-dashoffset] duration-slow ease-soft group-hover:[stroke-dashoffset:0] group-focus-visible:[stroke-dashoffset:0] motion-reduce:transition-none"
                 />
               </svg>
             </span>

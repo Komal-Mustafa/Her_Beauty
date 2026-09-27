@@ -309,6 +309,7 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
       sameShopperOlderReview: '',
       hiddenReviews: [] as string[],
       topBrand: '',
+      suspendedBrand: '',
       hiddenBrands: [] as string[],
       liveSlug: '',
     };
@@ -337,6 +338,7 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
         status: 'suspended',
         ad: { packageCode: 'luxe' },
       });
+      ids.suspendedBrand = suspended.brandId;
       const lapsed = await seller('Lapsed', { ad: { packageCode: 'luxe', endsInDays: -1 } });
       const upcoming = await seller('Upcoming', {
         ad: { packageCode: 'luxe', startsInDays: 5, endsInDays: 35 },
@@ -401,6 +403,16 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
         products: before.products + 1, // the live product of an approved seller
         ordersDelivered: before.ordersDelivered + 4, // 3 delivered + 1 released
       });
+    });
+
+    it('hides the brands of a hidden seller from the brand list and brand page', async () => {
+      const hidden = await db.brand.findUniqueOrThrow({ where: { id: ids.suspendedBrand } });
+      const listed = ((await api.get('/brands').expect(200)).body as { id: string }[]).map(
+        (b) => b.id,
+      );
+      expect(listed).not.toContain(hidden.id);
+      expect(listed).toContain(ids.topBrand);
+      await api.get(`/brands/${hidden.slug}`).expect(404);
     });
 
     it('features only published 4–5 star quotes of live products from delivered orders', async () => {

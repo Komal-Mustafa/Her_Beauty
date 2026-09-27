@@ -21,9 +21,11 @@ Hero (P3, unchanged)
 Footer (P1, unchanged)
 ```
 
-- The rails run from section 1 to section 6 and stay `position: sticky` beside them. The centre
-  column is capped at 1280 px (content width); rails + gaps sit outside that, so the whole row is at
-  most 1440 px (hero width, 04 §4).
+- The rails run from section 1 to section 6 and stay `position: sticky` beside them. The whole row
+  is at most 1440 px (hero width, 04 §4): two 240 px rails, 32 px gaps and the page gutters leave
+  the centre column 688 px wide at 1280 and at most 848 px. Without rails (below 1280) the column
+  is the full content width. Sections therefore size by the column (container queries), not the
+  viewport, and the trending carousel does not bleed into the gutter next to the rails.
 - Below 1280 px the rails are not rendered visible; the same ads appear as full-width in-feed cards:
   the 3D ad after section 1 and the video ad after section 2 (04 §6.1 "Mobile").
 - Both variants may exist in the DOM; the hidden one is `display: none` (out of the a11y tree), and
@@ -38,7 +40,7 @@ Footer (P1, unchanged)
 | 3 | Official brands | `getFeaturedBrands()` then `getBrands()` | Gold-bordered round logos in a slow **marquee**; featured brands (paid Luxe = "featured", Icon = "top") come first and carry **Sponsored**. Pauses on hover/focus; reduced motion = static wrapped row. Links `/brand/{slug}` |
 | 4 | New arrivals | `getProducts({ sort: 'newest', limit: 8 })` | Grid 2 cols (mobile) → 3 (≥768) → 4 (≥1024 centre width permitting); cards reveal with stagger |
 | 5 | Offer banner | house promo (not an ad) | `grad-rose` panel, Playfair headline, gold button; **gold shimmer sweep** once when it scrolls into view and once per hover |
-| 6 | Loved by shoppers | `getFeaturedReviews(3)`, `getStorefrontStats()` | 3 review cards (stars, quote, name, product link, "Verified purchase"); `TrustStrip`; counters (verified sellers, official brands, products, orders delivered) **count up** once when visible |
+| 6 | Loved by shoppers | `getFeaturedReviews(3)`, `getStorefrontStats()` | Up to 3 review cards, one per shopper (stars, title, quote, name, "Verified purchase", product link); counters (verified sellers, official brands, products, orders delivered) **count up** once when visible. The footer's `TrustStrip` follows straight after, so this section does not repeat it |
 
 Headings use `SectionHeading` (eyebrow + Playfair). Every section is a `<section aria-labelledby>`.
 
@@ -65,8 +67,9 @@ pauses while hovered, focused, off-screen, tab hidden, or when the shopper press
 - **Right — video ad.** `<video muted loop playsInline preload="none" poster>`; plays only while
   visible and not reduced-motion; visible **Pause/Play** button (04 §10); no sound, so no captions
   track is needed (the headline is the text alternative). A placeholder loop is generated locally
-  (no network): `apps/web/public/placeholders/video-placeholder.webm` (+ `.mp4` if the encoder is
-  available), short, small (< 1.5 MB), rendered from our own 3D scene.
+  (no network) by `apps/web/scripts/render-ad-loop.mjs`: `apps/web/public/placeholders/
+  video-placeholder.webm`, 8 s, 480×600, VP9, about 160 KB, rendered from our own 3D stage. There is
+  no `.mp4` (the headless encoder has no H.264); a browser that cannot play WebM keeps the poster.
 - **Empty slot:** a house card "Advertise with Her Beauty" → `/advertise` (not labelled Sponsored).
 - Impression/click tracking is P9 (TODO in code).
 
@@ -109,14 +112,19 @@ rises); the count is client-only and reserves its space (no layout shift).
 ## 6. Data additions (types → sdk mock + http → API)
 
 - `getStorefrontStats(): StorefrontStats` = `{ verifiedSellers, officialBrands, products,
-  ordersDelivered }` (ints). API `GET /v1/stats/storefront` (public, cacheable): approved sellers,
-  protected/official brands, live products of live sellers, delivered seller orders.
-- `getFeaturedReviews(limit ≤ 12): FeaturedReview[]` = `Review` + `{ product: { slug, title } }`,
-  4–5 stars, verified purchase, newest first, only live products of live sellers. API
-  `GET /v1/reviews/featured?limit=`.
-- `getFeaturedBrands(): FeaturedBrand[]` = `Brand` + `{ placement: 'top' | 'featured' }` from active,
-  approved ad subscriptions whose package has `featuredBrand` (`top` for Icon first). API
-  `GET /v1/brands/featured`. Always rendered with **Sponsored**.
+  ordersDelivered }` (ints). API `GET /v1/stats/storefront` (public, `max-age=300`): approved,
+  not deleted sellers; protected brands whose owner (if any) is a visible seller; live products of
+  visible sellers; seller orders delivered or delivered and released.
+- `getFeaturedReviews(limit ≤ 12): FeaturedReview[]` = `Review` + `{ product: { slug, title } }`:
+  4–5 stars with a non-empty body, from a delivered order, customer not deleted, only live products
+  of visible sellers; **one quote per shopper** (their newest), picked from the newest
+  `limit × 4` eligible reviews; newest first, ties by product slug then id (same pick in mock and
+  http). May return fewer than `limit`. API `GET /v1/reviews/featured?limit=`.
+- `getFeaturedBrands(): FeaturedBrand[]` = `Brand` + `{ placement: 'top' | 'featured' }`: protected
+  brands whose owner has an `active` (not past due) subscription inside its current period, on a
+  package with `featuredBrand` (`top` = Icon first, then Luxe `featured`), at most 24. API
+  `GET /v1/brands/featured`. Always rendered with **Sponsored**. The slug `featured` must be
+  reserved when brand creation is built.
 - `ProductCard.quickAddVariantId` (done at the start of P4).
 
 ## 7. Budgets and checks

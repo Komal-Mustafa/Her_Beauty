@@ -9,7 +9,8 @@ import { useRef } from 'react';
 /**
  * Home §5 (docs/p4-home.md §2): a house promotion, not an ad, so it carries no Sponsored label.
  * A gold shine sweeps across once when the banner scrolls into view and again on each hover.
- * Only transform moves; reduced motion shortens the sweep to nothing (global rule in theme.css).
+ * Only transform moves (the rest offset is a transform too, so the sweep crosses the whole banner);
+ * reduced motion shortens the sweep to nothing (global rule in theme.css).
  */
 export function OfferBanner() {
   const ref = useRef<HTMLElement>(null);
@@ -23,11 +24,11 @@ export function OfferBanner() {
     >
       <span
         aria-hidden
-        className={`pointer-events-none absolute inset-0 -z-10 -translate-x-[120%] bg-shine opacity-40 ${seen ? 'animate-shimmer' : ''}`}
+        className={`pointer-events-none absolute inset-0 -z-10 bg-shine [transform:translateX(-120%)] opacity-40 ${seen ? 'animate-shimmer' : ''}`}
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 -translate-x-[120%] bg-shine opacity-40 group-hover:animate-shimmer"
+        className="pointer-events-none absolute inset-0 -z-10 bg-shine [transform:translateX(-120%)] opacity-40 group-hover:animate-shimmer"
       />
       {/* Deepens the light end of grad-rose so white text keeps 4.5:1 across the banner. */}
       <span
@@ -48,7 +49,7 @@ export function OfferBanner() {
           <p className="eyebrow mb-3 text-pink-100">This season</p>
           <h2
             id="offer-title"
-            className="font-display text-[28px] font-medium leading-tight sm:text-[36px]"
+            className="font-display text-[28px] font-medium leading-tight text-balance sm:text-[36px]"
           >
             Glow for less, from sellers you can trust
           </h2>
@@ -60,7 +61,13 @@ export function OfferBanner() {
             </span>
           </p>
         </div>
-        <Button asChild variant="gold" size="lg" className="self-start @3xl:self-center">
+        {/* The global pink focus ring would vanish on this pink banner (about 1.5:1). */}
+        <Button
+          asChild
+          variant="gold"
+          size="lg"
+          className="self-start focus-visible:outline-white @3xl:self-center"
+        >
           <Link href="/offers">See today’s offers</Link>
         </Button>
       </div>

@@ -5,8 +5,8 @@ import { ShopProductCard } from '@/components/product/shop-product-card';
 
 /**
  * Home §4 (docs/p4-home.md §2): the newest products in a grid sized by the centre column
- * (container queries), 2 → 3 → 4 across. At 3 across only the first six show, so every row is
- * full. Cards rise in with a stagger.
+ * (container queries), 2 → 3 → 4 across. At 3 across only the first six show, so with the usual
+ * eight products every row is full. Cards rise in with a stagger.
  */
 export function NewArrivals({ products }: { products: readonly ProductCard[] }) {
   if (products.length === 0) return null;
@@ -16,7 +16,7 @@ export function NewArrivals({ products }: { products: readonly ProductCard[] }) 
         eyebrow="Just landed"
         title={<span id="new-title">New arrivals</span>}
         action={
-          <Button asChild variant="secondary" size="sm" className="self-start md:self-end">
+          <Button asChild variant="secondary" className="self-start md:self-end">
             <Link href="/new">See all new arrivals</Link>
           </Button>
         }

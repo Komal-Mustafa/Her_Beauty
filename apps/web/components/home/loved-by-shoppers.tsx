@@ -20,8 +20,10 @@ export function LovedByShoppers({
   stats,
 }: {
   reviews: readonly FeaturedReview[];
-  stats: StorefrontStats;
+  /** null when the counters could not be loaded: they are left out. */
+  stats: StorefrontStats | null;
 }) {
+  if (reviews.length === 0 && !stats) return null;
   return (
     <section aria-labelledby="loved-title">
       <SectionHeading
@@ -59,19 +61,22 @@ export function LovedByShoppers({
         </ul>
       ) : null}
 
-      <dl className="mt-10 grid grid-cols-2 gap-4 @xl:grid-cols-4 @4xl:gap-6">
-        {STATS.map(({ key, label }) => (
-          <div
-            key={key}
-            className="flex flex-col-reverse items-center gap-1 rounded-card border border-gold-500 bg-white px-4 py-6 text-center"
-          >
-            <dt className="text-sm text-ink-500">{label}</dt>
-            <dd className="font-display text-[28px] font-semibold text-pink-600 md:text-[40px]">
-              <CountUp value={stats[key]} />
-            </dd>
-          </div>
-        ))}
-      </dl>
+      {stats ? (
+        <dl className="mt-10 grid grid-cols-2 gap-4 @xl:grid-cols-4 @4xl:gap-6">
+          {STATS.map(({ key, label }) => (
+            <div
+              key={key}
+              className="flex min-w-0 flex-col-reverse items-center gap-1 rounded-card border border-gold-500 bg-white px-3 py-6 text-center"
+            >
+              <dt className="text-sm text-ink-500">{label}</dt>
+              {/* Sized by the column, not the viewport: four boxes share 688 px beside the rails. */}
+              <dd className="max-w-full font-display text-[26px] font-semibold text-pink-600 [overflow-wrap:anywhere] @3xl:text-[32px] @5xl:text-[40px]">
+                <CountUp value={stats[key]} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </section>
   );
 }

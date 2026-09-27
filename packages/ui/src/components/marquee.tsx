@@ -254,10 +254,15 @@ function offsetOf(loop: Loop): number {
   return ((time % loop.duration) / loop.duration) * loop.distance - loop.inset;
 }
 
-/** Moves the loop so the strip's left edge is at `offset` (taken modulo one copy). */
+/**
+ * Moves the loop so the strip's left edge is at `offset` (taken modulo one copy). Offsets are
+ * rounded to whole pixels first: layout rects carry float noise, and a hair below a copy's start
+ * would otherwise wrap to the far end of the loop and draw the item a whole copy off screen.
+ */
 function seek(loop: Loop, offset: number): void {
-  const within = (((offset + loop.inset) % loop.distance) + loop.distance) % loop.distance;
-  loop.animation.currentTime = (within / loop.distance) * loop.duration;
+  const d = loop.distance;
+  const within = ((Math.round(offset + loop.inset) % d) + d) % d;
+  loop.animation.currentTime = (within / d) * loop.duration;
 }
 
 function isFocusVisible(el: Element): boolean {

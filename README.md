@@ -11,11 +11,11 @@ All product, technical and design decisions live in [`docs/`](docs/00-README.md)
 | `apps/web` | Customer storefront | http://localhost:3000 |
 | `apps/seller` | Vendor + manufacturer portal | http://localhost:3001 |
 | `apps/admin` | Admin console | http://localhost:3002 |
-| `apps/api` | NestJS REST API (`/v1`): catalogue, stores, reviews, ads, plans, accounts + login | http://localhost:4000/v1 |
+| `apps/api` | NestJS REST API (`/v1`): catalogue, stores, reviews, ads, plans, home highlights, accounts + login | http://localhost:4000/v1 |
 | `packages/db` | Prisma schema (55 tables), migrations with RLS, seed | – |
 | `packages/auth` | Login for the three apps: server-only API helpers, cookies, middleware, shared auth UI | – |
-| `packages/ui` | Brand components (Button, Badge, Stepper, ShadePicker…) | – |
-| `packages/three` | 3D: device tiers, models, viewer, hero (P2–P3) | – |
+| `packages/ui` | Brand components (Button, Badge, ProductCard, Carousel, Marquee, CountUp…) | – |
+| `packages/three` | 3D: device tiers, models, viewer, hero, sidebar ad stage (P2–P4) | – |
 | `packages/sdk` | `getApi()` data client — mock data or the real API (`NEXT_PUBLIC_API_MODE`) | – |
 | `packages/types` | zod schemas shared by every app (money = integer paisa) | – |
 | `packages/config` | tsconfig, eslint, Tailwind 4 brand theme | – |
@@ -59,7 +59,7 @@ SEED_DEMO_PASSWORD='choose-one' SEED_ADMIN_EMAIL=you@example.com pnpm --filter @
 
 | App | Log in with |
 |---|---|
-| Shop (`/login`) | `ayesha@hb.test` or `sana@hb.test`, or any mobile number with a code |
+| Shop (`/login`) | `ayesha@hb.test`, `sana@hb.test`, `mehwish@hb.test`, `hira@hb.test` or `fatima@hb.test`, or any mobile number with a code |
 | Seller portal (`/login`) | `owner@<store-slug>.test`, e.g. `owner@rose-house.test` |
 | Admin (`/login`) | the `SEED_ADMIN_EMAIL` account; the first sign-in sets up two-step verification |
 
@@ -71,3 +71,7 @@ Checks (same as CI): `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
 Fonts are self-hosted in `packages/config/fonts` (OFL-1.1), so builds need no network access.
 
 Add `?tier=high|mid|low` to any storefront URL to force a 3D device tier while testing.
+
+Dev previews (hidden in production unless `NEXT_PUBLIC_ENABLE_DEV_PAGES=true`): `/dev/3d` models,
+`/dev/ui` product cards, carousel, marquee and counters, `/dev/ads` the sidebar ads. The video ad
+placeholder is rendered from our own 3D stage by `apps/web/scripts/render-ad-loop.mjs`.

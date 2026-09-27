@@ -28,6 +28,11 @@ export const LIVE_SELLER = {
   deletedAt: null,
 } satisfies Prisma.SellerWhereInput;
 
+/** Storefront-visible brands: a brand whose owning seller is hidden is hidden with it. */
+export const VISIBLE_BRAND = {
+  OR: [{ ownerSellerId: null }, { ownerSeller: LIVE_SELLER }],
+} satisfies Prisma.BrandWhereInput;
+
 /** Storefront-visible products: live, not deleted, and sold by a visible seller. */
 export const LIVE = {
   status: 'live',
@@ -73,12 +78,16 @@ export class CatalogService {
   }
 
   async brands() {
-    const rows = await this.db.brand.findMany({ orderBy: { name: 'asc' } });
+    const rows = await this.publicRead((tx) =>
+      tx.brand.findMany({ where: VISIBLE_BRAND, orderBy: { name: 'asc' } }),
+    );
     return rows.map(toBrand);
   }
 
   async brand(slug: string) {
-    const row = await this.db.brand.findUnique({ where: { slug } });
+    const row = await this.publicRead((tx) =>
+      tx.brand.findFirst({ where: { slug, ...VISIBLE_BRAND } }),
+    );
     if (!row) throw notFound('Brand');
     return toBrand(row);
   }

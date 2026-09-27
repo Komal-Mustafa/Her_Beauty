@@ -22,6 +22,11 @@ type CarouselProps = {
   header?: ReactNode;
   /** Slide widths. Default: 1.4 → 2.2 → 3.2 → 4 cards per view. */
   itemClassName?: string;
+  /**
+   * Extra classes for the track. It bleeds into the page gutter by default (16 px, 24 px from
+   * 1024); pass e.g. `lg:mx-0 lg:px-0 lg:scroll-px-0` where something sits in that gutter.
+   */
+  trackClassName?: string;
   prevLabel?: string;
   nextLabel?: string;
   className?: string;
@@ -49,6 +54,7 @@ export function Carousel({
   children,
   header,
   itemClassName = DEFAULT_ITEM,
+  trackClassName,
   prevLabel = 'Previous',
   nextLabel = 'Next',
   className,
@@ -137,6 +143,7 @@ export function Carousel({
           '-mx-4 scroll-px-4 px-4 md:-mx-6 md:scroll-px-6 md:px-6 -mb-8 pb-14 pt-3',
           '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
           'data-[dragging=true]:cursor-grabbing data-[dragging=true]:select-none data-[dragging=true]:[&>li]:pointer-events-none',
+          trackClassName,
         )}
       >
         {items.map((child, i) => (
