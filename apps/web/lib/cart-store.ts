@@ -15,8 +15,26 @@ export const MAX_QTY = 10;
 /** More distinct items than this is not a real basket; it also bounds what we keep in storage. */
 export const MAX_LINES = 50;
 
-/** Only same-site paths or https URLs from storage ever reach an <img>. */
-const ImageUrl = z.string().check(z.maxLength(2048), z.regex(/^(\/(?!\/)|https:\/\/)/));
+/** Stands in for this site's origin when resolving a stored path. */
+const SAME_SITE = 'http://same-site.invalid';
+
+/**
+ * Only same-site paths or https URLs from storage ever reach an <img>. Judged by how a browser
+ * resolves the value, not by its first characters: `/\host/x` and `/<tab>/host/x` start with one
+ * slash, yet load from another host over plain http.
+ */
+function isSafeImageUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value, SAME_SITE);
+  } catch {
+    return false;
+  }
+  if (value.startsWith('/')) return url.origin === SAME_SITE;
+  return value.startsWith('https://') && url.protocol === 'https:';
+}
+
+const ImageUrl = z.string().check(z.maxLength(2048), z.refine(isSafeImageUrl));
 
 export const CartLine = z.object({
   variantId: StoredId,

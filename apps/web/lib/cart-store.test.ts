@@ -86,6 +86,11 @@ describe('parseCart (stored JSON is untrusted)', () => {
     ['a bad slug', { productSlug: '../admin' }],
     ['a javascript: image', { image: 'javascript:alert(1)' }],
     ['a protocol-relative image', { image: '//evil.example/x.png' }],
+    // Browsers read `\` as `/` and drop tabs and newlines: each of these is `//evil.example`.
+    ['a backslash host image', { image: '/\\evil.example/pixel.png' }],
+    ['a tab-split host image', { image: '/\t/evil.example/pixel.png' }],
+    ['a newline-split host image', { image: '/\n/evil.example/pixel.png' }],
+    ['a relative image', { image: 'placeholders/x.png' }],
     ['a plain-http image', { image: 'http://cdn.example/x.png' }],
     ['an empty title', { title: '' }],
   ])('drops a line with %s', (_, bad) => {
@@ -94,8 +99,9 @@ describe('parseCart (stored JSON is untrusted)', () => {
     ).toEqual(['ok']);
   });
 
-  it('accepts https images', () => {
+  it('accepts https images and same-site paths', () => {
     expect(parseCart([line({ image: 'https://media.herbeauty.pk/p/1.webp' })])).toHaveLength(1);
+    expect(parseCart([line({ image: '/_next/image?url=%2Fx.png&w=640' })])).toHaveLength(1);
   });
 
   it.each([null, 'cart', 42, { lines: [] }])('turns %j into an empty cart', (value) => {
