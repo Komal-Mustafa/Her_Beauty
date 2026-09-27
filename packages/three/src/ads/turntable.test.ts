@@ -11,6 +11,7 @@ import {
   RESUME_AFTER,
   SPIN_SPEED,
   stepTurntable,
+  turntableAtRest,
   type Turntable,
 } from './turntable';
 
@@ -81,5 +82,18 @@ describe('turntable', () => {
     run(t, 1);
     expect(t.target).toBeNull();
     expect(t.angle).toBeCloseTo(KEY_STEP, 3);
+  });
+
+  it('comes to rest once paused, so the stage can stop drawing', () => {
+    const t = createTurntable(true);
+    expect(turntableAtRest(t)).toBe(false);
+    run(t, 3, false);
+    expect(turntableAtRest(t)).toBe(true);
+    expect(turntableAtRest(grabTurntable(t))).toBe(false);
+    releaseTurntable(t, false);
+    expect(turntableAtRest(t)).toBe(true);
+    // A flick or an arrow key moves it again even while paused, then it settles.
+    expect(turntableAtRest(nudgeTurntable(t, 1))).toBe(false);
+    expect(turntableAtRest(run(t, 1, false))).toBe(true);
   });
 });

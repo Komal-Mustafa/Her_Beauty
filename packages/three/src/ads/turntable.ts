@@ -123,6 +123,11 @@ export function nudgeTurntable(t: Turntable, direction: -1 | 1): Turntable {
   return t;
 }
 
+/** Nothing moves by itself any more: no spin, glide, arrow-key target or finger on it. */
+export function turntableAtRest(t: Turntable): boolean {
+  return !t.dragging && t.spin === 0 && t.glide === 0 && t.target === null;
+}
+
 /** Vertical float offset for the current bob phase. */
 export function bobOffset(t: Turntable): number {
   return Math.sin(t.bob * Math.PI * 2) * BOB_HEIGHT;
