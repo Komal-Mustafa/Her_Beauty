@@ -131,107 +131,115 @@ export function ProductCard({
   };
 
   return (
-    <article
-      className={cn(
-        'group/card relative flex h-full flex-col rounded-card border border-ink-200 bg-white transition duration-base ease-soft',
-        'hover:-translate-y-1 has-focus-visible:-translate-y-1 motion-reduce:hover:translate-y-0 motion-reduce:has-focus-visible:translate-y-0',
-        // Shadow lives on a pseudo-element so only its opacity animates.
-        'before:pointer-events-none before:absolute before:inset-0 before:rounded-card before:opacity-0 before:shadow-lift before:transition-opacity before:duration-base before:ease-soft hover:before:opacity-100 has-focus-visible:before:opacity-100',
-        className,
-      )}
-    >
-      <div className="flex flex-1 flex-col gap-1.5 p-3 sm:p-4">
-        {/* Wraps on narrow cards so neither the brand nor Sponsored gets cut. */}
-        <div className="flex min-h-5 flex-wrap items-center justify-between gap-x-2 gap-y-1">
-          <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-800">
-            {product.brand.name}
+    // The article is the hover target and never moves; the card inside it lifts. Lifting the hover
+    // target itself would pull it from under a pointer resting near its bottom edge, over and over.
+    <article className={cn('group/card flex h-full flex-col', className)}>
+      <div
+        className={cn(
+          'relative flex flex-1 flex-col rounded-card border border-ink-200 bg-white transition duration-base ease-soft',
+          'group-hover/card:-translate-y-1 group-has-focus-visible/card:-translate-y-1 motion-reduce:group-hover/card:translate-y-0 motion-reduce:group-has-focus-visible/card:translate-y-0',
+          // Shadow lives on a pseudo-element so only its opacity animates.
+          'before:pointer-events-none before:absolute before:inset-0 before:rounded-card before:opacity-0 before:shadow-lift before:transition-opacity before:duration-base before:ease-soft group-hover/card:before:opacity-100 group-has-focus-visible/card:before:opacity-100',
+        )}
+      >
+        <div className="flex flex-1 flex-col gap-1.5 p-3 sm:p-4">
+          {/* Wraps on narrow cards so neither the brand nor Sponsored gets cut. */}
+          <div className="flex min-h-5 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-800">
+              {product.brand.name}
+            </p>
+            {product.sponsored && <Badge kind="sponsored" className="shrink-0 px-2" />}
+          </div>
+          <Heading className="min-h-[2lh] font-sans text-sm font-medium leading-snug text-ink-900 md:text-[15px]">
+            <Link
+              href={href}
+              className={cn(
+                'line-clamp-2 transition-colors duration-fast hover:text-pink-700',
+                // Stretched link: the whole card is the link target.
+                "after:absolute after:inset-0 after:z-[1] after:rounded-card after:content-['']",
+                'focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-pink-400',
+              )}
+            >
+              {product.title}
+            </Link>
+          </Heading>
+          <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ink-500">
+            <span className="min-w-0 truncate">{product.seller.storeName}</span>
+            {product.seller.badge === 'official_brand' ? (
+              <Badge kind="official" className="shrink-0 px-2">
+                Official
+              </Badge>
+            ) : (
+              <Badge kind="verified" className="shrink-0 px-2">
+                Verified
+              </Badge>
+            )}
           </p>
-          {product.sponsored && <Badge kind="sponsored" className="shrink-0 px-2" />}
+          {product.ratingCount > 0 && (
+            <Rating
+              value={product.rating}
+              count={product.ratingCount}
+              compact
+              className="text-xs"
+            />
+          )}
+          <Price
+            amount={product.price}
+            compareAt={product.compareAtPrice}
+            currency={product.currency}
+            size="sm"
+            className="gap-x-1.5 gap-y-0"
+          />
+          <div className="mt-auto pt-2 [@media(hover:hover)]:hidden">{action('inline')}</div>
         </div>
-        <Heading className="min-h-[2lh] font-sans text-sm font-medium leading-snug text-ink-900 md:text-[15px]">
-          <Link
-            href={href}
+
+        <div className="relative order-first aspect-[4/5] overflow-hidden rounded-t-[calc(var(--radius-card)-1px)] bg-blush-50">
+          {primary && (
+            <Img
+              src={primary.url}
+              alt={primary.alt}
+              sizes={sizes}
+              priority={priority}
+              className="object-cover transition duration-slow ease-soft group-hover/card:scale-[1.04] motion-reduce:group-hover/card:scale-100"
+            />
+          )}
+          {secondary && (
+            // Hover-only crossfade; display:none on touch so the lazy image is never fetched there.
+            <span aria-hidden className="absolute inset-0 hidden [@media(hover:hover)]:block">
+              <Img
+                src={secondary.url}
+                alt=""
+                sizes={sizes}
+                className="object-cover opacity-0 transition duration-slow ease-soft group-hover/card:scale-[1.04] group-hover/card:opacity-100 motion-reduce:group-hover/card:scale-100"
+              />
+            </span>
+          )}
+
+          {(product.has3d || product.isNew) && (
+            <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5 sm:left-3 sm:top-3">
+              {product.has3d && <Badge kind="threeD" className="px-2" />}
+              {product.isNew && <Badge kind="new" className="px-2" />}
+            </div>
+          )}
+
+          {onToggleWishlist && (
+            <WishlistButton
+              pressed={wishlisted}
+              title={product.title}
+              onToggle={() => onToggleWishlist(product)}
+            />
+          )}
+
+          <div
             className={cn(
-              'line-clamp-2 transition-colors duration-fast hover:text-pink-700',
-              // Stretched link: the whole card is the link target.
-              "after:absolute after:inset-0 after:z-[1] after:rounded-card after:content-['']",
-              'focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-pink-400',
+              'pointer-events-none absolute inset-x-2.5 bottom-2.5 z-[2] flex flex-col items-start gap-2 sm:inset-x-3 sm:bottom-3',
+              'transition duration-base ease-soft [@media(hover:hover)]:translate-y-3 [@media(hover:hover)]:opacity-0',
+              'group-hover/card:translate-y-0 group-hover/card:opacity-100 group-has-focus-visible/card:translate-y-0 group-has-focus-visible/card:opacity-100 motion-reduce:[@media(hover:hover)]:translate-y-0',
             )}
           >
-            {product.title}
-          </Link>
-        </Heading>
-        <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ink-500">
-          <span className="min-w-0 truncate">{product.seller.storeName}</span>
-          {product.seller.badge === 'official_brand' ? (
-            <Badge kind="official" className="shrink-0 px-2">
-              Official
-            </Badge>
-          ) : (
-            <Badge kind="verified" className="shrink-0 px-2">
-              Verified
-            </Badge>
-          )}
-        </p>
-        {product.ratingCount > 0 && (
-          <Rating value={product.rating} count={product.ratingCount} compact className="text-xs" />
-        )}
-        <Price
-          amount={product.price}
-          compareAt={product.compareAtPrice}
-          currency={product.currency}
-          size="sm"
-          className="gap-x-1.5 gap-y-0"
-        />
-        <div className="mt-auto pt-2 [@media(hover:hover)]:hidden">{action('inline')}</div>
-      </div>
-
-      <div className="relative order-first aspect-[4/5] overflow-hidden rounded-t-[calc(var(--radius-card)-1px)] bg-blush-50">
-        {primary && (
-          <Img
-            src={primary.url}
-            alt={primary.alt}
-            sizes={sizes}
-            priority={priority}
-            className="object-cover transition duration-slow ease-soft group-hover/card:scale-[1.04] motion-reduce:group-hover/card:scale-100"
-          />
-        )}
-        {secondary && (
-          // Hover-only crossfade; display:none on touch so the lazy image is never fetched there.
-          <span aria-hidden className="absolute inset-0 hidden [@media(hover:hover)]:block">
-            <Img
-              src={secondary.url}
-              alt=""
-              sizes={sizes}
-              className="object-cover opacity-0 transition duration-slow ease-soft group-hover/card:scale-[1.04] group-hover/card:opacity-100 motion-reduce:group-hover/card:scale-100"
-            />
-          </span>
-        )}
-
-        {(product.has3d || product.isNew) && (
-          <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5 sm:left-3 sm:top-3">
-            {product.has3d && <Badge kind="threeD" className="px-2" />}
-            {product.isNew && <Badge kind="new" className="px-2" />}
+            {product.shades.length > 0 && <ShadeDots shades={product.shades} />}
+            {action('overlay')}
           </div>
-        )}
-
-        {onToggleWishlist && (
-          <WishlistButton
-            pressed={wishlisted}
-            title={product.title}
-            onToggle={() => onToggleWishlist(product)}
-          />
-        )}
-
-        <div
-          className={cn(
-            'pointer-events-none absolute inset-x-2.5 bottom-2.5 z-[2] flex flex-col items-start gap-2 sm:inset-x-3 sm:bottom-3',
-            'transition duration-base ease-soft [@media(hover:hover)]:translate-y-3 [@media(hover:hover)]:opacity-0',
-            'group-hover/card:translate-y-0 group-hover/card:opacity-100 group-has-focus-visible/card:translate-y-0 group-has-focus-visible/card:opacity-100 motion-reduce:[@media(hover:hover)]:translate-y-0',
-          )}
-        >
-          {product.shades.length > 0 && <ShadeDots shades={product.shades} />}
-          {action('overlay')}
         </div>
       </div>
     </article>

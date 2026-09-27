@@ -49,6 +49,16 @@ describe('ProductCard', () => {
     expect(link.className).toContain('after:inset-0');
   });
 
+  it('lifts a layer inside the hover target, so a resting pointer never loses the hover', () => {
+    render(<ProductCard product={base} />);
+    const card = screen.getByRole('article');
+    expect(card.className).toContain('group/card');
+    expect(card.className).not.toMatch(/translate/);
+    const surface = card.firstElementChild;
+    expect(surface?.className).toContain('group-hover/card:-translate-y-1');
+    expect(surface?.contains(screen.getByRole('link', { name: base.title }))).toBe(true);
+  });
+
   it('shows price from paisa with the compare-at price', () => {
     render(<ProductCard product={base} />);
     expect(screen.getByText('Rs 1,850')).toBeTruthy();
