@@ -734,8 +734,26 @@ export const servedAds: ServedAd[] = [
     productSlug: 'vitamin-c-glow-serum',
     media: {
       kind: 'video',
-      url: '/placeholders/video-placeholder.mp4',
+      // Loop rendered from our 3D stage (apps/web/scripts/render-ad-loop.mjs). WebM/VP9: the
+      // headless Chromium encoder has no H.264. [CONFIRM] real videos come from Stream/Mux.
+      url: '/placeholders/video-placeholder.webm',
       posterUrl: '/placeholders/serum-1.svg',
+      model3dKind: null,
+      shadeHex: null,
+    },
+  },
+  {
+    id: 'ad-right-2',
+    slot: 'right_video',
+    sellerName: 'Rose House',
+    headline: 'Oud Blush Parfum',
+    ctaLabel: 'Discover the scent',
+    href: '/product/oud-blush-parfum',
+    productSlug: 'oud-blush-parfum',
+    media: {
+      kind: 'video',
+      url: '/placeholders/video-placeholder.webm',
+      posterUrl: '/placeholders/perfume-2.svg',
       model3dKind: null,
       shadeHex: null,
     },
