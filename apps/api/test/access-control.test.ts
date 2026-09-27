@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { createPrismaClient, uuidv7 } from '@hb/db';
 import {
   AdPackage,
+  FeaturedBrand,
+  FeaturedReview,
   HeroScene,
   Me,
   Page,
@@ -14,6 +16,7 @@ import {
   SellerProfile,
   ServedAd,
   Store,
+  StorefrontStats,
   TokenPair,
 } from '@hb/types';
 import { IS_PUBLIC } from '../src/auth/decorators';
@@ -146,6 +149,9 @@ describe.skipIf(!hasDb)('access control', () => {
           'GET /ads/serve',
           'GET /cms/hero-scenes',
           'GET /plans',
+          'GET /stats/storefront',
+          'GET /reviews/featured',
+          'GET /brands/featured',
           'POST /auth/register',
           'POST /auth/otp/send',
           'POST /auth/otp/verify',
@@ -347,6 +353,25 @@ describe.skipIf(!hasDb)('access control', () => {
           .array(AdPackage)
           .parse((await target.get('/ads/packages').expect(200)).body);
         expect(packages.some((p) => p.seatsTaken > 0)).toBe(true);
+      });
+    });
+
+    it('home highlights still count and feature live data (app.role = public_read)', async () => {
+      await withRlsEnforced(async (target) => {
+        // products, seller_orders and ad_subscriptions all have RLS.
+        const stats = StorefrontStats.parse(
+          (await target.get('/stats/storefront').expect(200)).body,
+        );
+        expect(stats.products).toBeGreaterThan(0);
+        expect(stats.ordersDelivered).toBeGreaterThan(0);
+        const reviews = z
+          .array(FeaturedReview)
+          .parse((await target.get('/reviews/featured').expect(200)).body);
+        expect(reviews.length).toBeGreaterThan(0);
+        const brands = z
+          .array(FeaturedBrand)
+          .parse((await target.get('/brands/featured').expect(200)).body);
+        expect(brands.length).toBeGreaterThan(0);
       });
     });
   });

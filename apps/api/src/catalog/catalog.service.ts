@@ -23,10 +23,13 @@ const MAX_SCAN = 2000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Only approved, non-deleted sellers are visible on the storefront. */
-const LIVE_SELLER = { status: 'approved', deletedAt: null } satisfies Prisma.SellerWhereInput;
+export const LIVE_SELLER = {
+  status: 'approved',
+  deletedAt: null,
+} satisfies Prisma.SellerWhereInput;
 
 /** Storefront-visible products: live, not deleted, and sold by a visible seller. */
-const LIVE = {
+export const LIVE = {
   status: 'live',
   deletedAt: null,
   seller: LIVE_SELLER,

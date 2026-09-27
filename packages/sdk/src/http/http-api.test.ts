@@ -27,6 +27,31 @@ describe('createHttpApi', () => {
     await expect(api.getProduct('nope')).resolves.toBeNull();
   });
 
+  it('calls the home highlight endpoints', async () => {
+    const f = fakeFetch(200, []);
+    const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: f });
+    await api.getStorefrontStats();
+    await api.getFeaturedBrands();
+    await api.getFeaturedReviews();
+    expect(f.mock.calls.map(([url]) => url)).toEqual([
+      'http://api.test/v1/stats/storefront',
+      'http://api.test/v1/brands/featured',
+      'http://api.test/v1/reviews/featured?limit=3',
+    ]);
+  });
+
+  it('clamps the featured review limit to 1–12 before asking the API', async () => {
+    const f = fakeFetch(200, []);
+    const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: f });
+    for (const limit of [0, 5, 7.6, 99]) await api.getFeaturedReviews(limit);
+    expect(f.mock.calls.map(([url]) => url.split('?')[1])).toEqual([
+      'limit=1',
+      'limit=5',
+      'limit=7',
+      'limit=12',
+    ]);
+  });
+
   it('surfaces the API error code on failures', async () => {
     const api = createHttpApi({
       baseUrl: 'http://api.test/v1',
