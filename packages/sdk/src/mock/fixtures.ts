@@ -532,6 +532,8 @@ function toProduct(seed: Seed, index: number): Product {
     hasVideo: seed.hasVideo ?? false,
     isNew: seed.isNew ?? false,
     sponsored: false,
+    quickAddVariantId:
+      variants.length === 1 && (variants[0]?.stock ?? 0) > 0 ? (variants[0]?.id ?? null) : null,
     descriptionHtml: `<p>${seed.title} by ${brand.name}. Crafted for a soft, luminous finish that lasts all day.</p>`,
     howToUse: 'Apply evenly and build up for more intensity.',
     ingredients: 'Full ingredient list provided by the seller. [CONFIRM]',
