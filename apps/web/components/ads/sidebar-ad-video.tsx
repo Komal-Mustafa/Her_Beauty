@@ -2,9 +2,9 @@
 
 import type { ServedAd } from '@hb/types';
 import { cn } from '@hb/ui';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdCard } from './ad-card';
-import type { SidebarAdProps } from './ad-layout';
+import { adFrameClass, type AdVariant, type SidebarAdProps } from './ad-layout';
 import { HouseAd } from './house-ad';
 import { useAdRotation } from './use-ad-rotation';
 
@@ -12,10 +12,21 @@ import { useAdRotation } from './use-ad-rotation';
  * Right sidebar video ad (`right_video`, docs/p4-home.md §3): a muted loop that plays only while
  * the card is visible and motion is allowed, with a visible Pause / Play button (04 §10). No
  * sound, so no captions track; the headline under the video is its text alternative.
+ *
+ * When the browser refuses to autoplay (battery saver) the button shows Play and the slot keeps
+ * rotating. A file this browser cannot play at all leaves the poster, like a still ad.
  */
 export function SidebarAdVideo({ ads, variant, className }: SidebarAdProps) {
   const rotation = useAdRotation(ads.length);
+  const [unplayable, setUnplayable] = useState<ReadonlySet<string>>(() => new Set());
+  const markUnplayable = useCallback(
+    (id: string) => setUnplayable((ids) => (ids.has(id) ? ids : new Set(ids).add(id))),
+    [],
+  );
   if (ads.length === 0) return <HouseAd variant={variant} className={className} />;
+
+  const current = ads[rotation.index];
+  const hasVideo = current !== undefined && !unplayable.has(current.id);
 
   return (
     <AdCard
@@ -23,17 +34,23 @@ export function SidebarAdVideo({ ads, variant, className }: SidebarAdProps) {
       ads={ads}
       rotation={rotation}
       className={className}
-      // White like the card: a portrait video letterboxed in the feed blends in (our placeholder
-      // loop fades to white edges for that reason).
-      mediaClassName="bg-white"
-      playControl={{ pause: 'Pause video', play: 'Play video' }}
+      playControl={
+        hasVideo
+          ? { pause: 'Pause video', play: 'Play video' }
+          : // Nothing to play: the button stays only to stop the rotation (04 §10).
+            ads.length > 1 && !rotation.reducedMotion
+            ? { pause: 'Pause ads', play: 'Play ads' }
+            : null
+      }
       media={ads.map((ad, i) => (
         <AdVideo
           key={ad.id}
           ad={ad}
+          variant={variant}
           active={i === rotation.index}
-          play={rotation.animate && i === rotation.index}
-          onBlocked={rotation.markPaused}
+          play={rotation.animate && i === rotation.index && !unplayable.has(ad.id)}
+          onBlocked={rotation.markBlocked}
+          onUnplayable={markUnplayable}
         />
       ))}
     />
@@ -42,16 +59,30 @@ export function SidebarAdVideo({ ads, variant, className }: SidebarAdProps) {
 
 function AdVideo({
   ad,
+  variant,
   active,
   play,
   onBlocked,
+  onUnplayable,
 }: {
   ad: ServedAd;
+  variant: AdVariant;
   active: boolean;
   play: boolean;
   onBlocked: () => void;
+  onUnplayable: (id: string) => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const sourceRef = useRef<HTMLSourceElement>(null);
+  const { id } = ad;
+
+  // A browser that cannot play the only <source> skips it (its `error` may fire before hydration)
+  // and waits for another, so play() never settles: ask up front. A failed download or decode
+  // later fires `error` on the <source> (below).
+  useEffect(() => {
+    const type = sourceRef.current?.type;
+    if (type && ref.current?.canPlayType(type) === '') onUnplayable(id);
+  }, [id, onUnplayable]);
 
   useEffect(() => {
     const video = ref.current;
@@ -64,11 +95,13 @@ function AdVideo({
     // sent; browsers only allow play() without a gesture when the element is muted.
     video.muted = true;
     video.play().catch((error: unknown) => {
-      // AbortError = paused again before it started. Anything else (autoplay refused by a
-      // battery saver, unsupported file) keeps the poster up and turns the button into Play.
-      if (!(error instanceof DOMException && error.name === 'AbortError')) onBlocked();
+      // AbortError = paused again before it started; NotSupportedError = nothing playable.
+      // Anything else (autoplay refused by a battery saver) keeps the poster up and shows Play.
+      const name = error instanceof DOMException ? error.name : '';
+      if (name === 'NotSupportedError') onUnplayable(id);
+      else if (name !== 'AbortError') onBlocked();
     });
-  }, [play, onBlocked]);
+  }, [play, id, onBlocked, onUnplayable]);
 
   return (
     <video
@@ -84,11 +117,17 @@ function AdVideo({
       aria-hidden
       tabIndex={-1}
       className={cn(
-        'absolute inset-0 h-full w-full object-contain transition-opacity duration-slow ease-soft',
+        adFrameClass(variant),
+        'object-contain transition-opacity duration-slow ease-soft',
         active ? 'opacity-100' : 'opacity-0',
       )}
     >
-      <source src={ad.media.url} type={videoType(ad.media.url)} />
+      <source
+        ref={sourceRef}
+        src={ad.media.url}
+        type={videoType(ad.media.url)}
+        onError={() => onUnplayable(id)}
+      />
     </video>
   );
 }

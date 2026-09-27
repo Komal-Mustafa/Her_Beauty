@@ -21,6 +21,11 @@ export type RotationState = {
   pageVisible: boolean;
   reducedMotion: boolean;
   play: PlayMode;
+  /**
+   * The browser refused to start the media by itself (autoplay blocked by a battery saver). The
+   * button shows Play until the shopper presses it; unlike their Pause, it never stops rotation.
+   */
+  mediaBlocked: boolean;
 };
 
 export type RotationAction =
@@ -33,7 +38,7 @@ export type RotationAction =
   | { type: 'pageVisible'; value: boolean }
   | { type: 'reducedMotion'; value: boolean }
   | { type: 'togglePlay' }
-  | { type: 'setPlay'; play: PlayMode };
+  | { type: 'mediaBlocked' };
 
 export function initialRotation(count: number): RotationState {
   return {
@@ -46,6 +51,7 @@ export function initialRotation(count: number): RotationState {
     pageVisible: true,
     reducedMotion: false,
     play: 'auto',
+    mediaBlocked: false,
   };
 }
 
@@ -74,15 +80,21 @@ export function rotationReducer(state: RotationState, action: RotationAction): R
     case 'reducedMotion':
       return { ...state, reducedMotion: action.value };
     case 'togglePlay':
-      return { ...state, play: isPlaying(state) ? 'paused' : 'playing' };
-    case 'setPlay':
-      return { ...state, play: action.play };
+      // Pressing Play is the gesture a blocked video was waiting for, so it may try again.
+      return isPlaying(state)
+        ? { ...state, play: 'paused' }
+        : { ...state, play: 'playing', mediaBlocked: false };
+    case 'mediaBlocked':
+      return { ...state, mediaBlocked: true };
   }
 }
 
-/** The shopper has not paused (reduced motion counts as paused until they press Play). */
+/**
+ * The media may move: the shopper has not paused (reduced motion counts as paused until they
+ * press Play) and the browser has not refused to start it.
+ */
 export function isPlaying(s: RotationState): boolean {
-  return s.play === 'playing' || (s.play === 'auto' && !s.reducedMotion);
+  return !s.mediaBlocked && (s.play === 'playing' || (s.play === 'auto' && !s.reducedMotion));
 }
 
 /** Video / 3D spin should run now: playing, and the card is on screen in a visible tab. */
@@ -91,8 +103,9 @@ export function shouldAnimate(s: RotationState): boolean {
 }
 
 /**
- * The 8 s timer should run: several ads, no reduced motion (dots only then), not paused, not
- * hovered or focused (the shopper is reading or using it), on screen, tab visible.
+ * The 8 s timer should run: several ads, no reduced motion (dots only then), not paused by the
+ * shopper (a blocked video does not count), not hovered or focused (the shopper is reading or
+ * using it), on screen, tab visible.
  */
 export function shouldAutoRotate(s: RotationState): boolean {
   return (

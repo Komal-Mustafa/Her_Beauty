@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useEffect, useState, type RefObject } from 'react';
 import { AdCard } from './ad-card';
-import { adMediaSizes, type SidebarAdProps } from './ad-layout';
+import { adFrameClass, adMediaSizes, type SidebarAdProps } from './ad-layout';
 import { HouseAd } from './house-ad';
 import { useAdRotation } from './use-ad-rotation';
 
@@ -76,7 +76,6 @@ export function SidebarAd3D({ ads, variant, className }: SidebarAdProps) {
       ads={ads}
       rotation={rotation}
       className={className}
-      mediaClassName="bg-grad-pink"
       playControl={
         live || (ads.length > 1 && !rotation.reducedMotion)
           ? { pause: 'Pause animation', play: 'Play animation' }
@@ -86,17 +85,22 @@ export function SidebarAd3D({ ads, variant, className }: SidebarAdProps) {
         <>
           {ads.map((ad, i) =>
             ad.media.posterUrl ? (
-              <Image
+              <div
                 key={ad.id}
-                src={ad.media.posterUrl}
-                alt=""
-                fill
-                sizes={adMediaSizes(variant)}
                 className={cn(
-                  'object-contain transition-opacity duration-slow ease-soft',
+                  adFrameClass(variant),
+                  'transition-opacity duration-slow ease-soft',
                   postersOn && i === rotation.index ? 'opacity-100' : 'opacity-0',
                 )}
-              />
+              >
+                <Image
+                  src={ad.media.posterUrl}
+                  alt=""
+                  fill
+                  sizes={adMediaSizes(variant)}
+                  className="object-contain"
+                />
+              </div>
             ) : null,
           )}
           {live && staged && stagedKind ? (

@@ -62,8 +62,8 @@ export function useAdRotation(count: number) {
     () => ({
       goTo: (index: number) => dispatch({ type: 'goTo', index }),
       togglePlay: () => dispatch({ type: 'togglePlay' }),
-      /** The media could not start by itself (e.g. autoplay blocked): show Play. */
-      markPaused: () => dispatch({ type: 'setPlay', play: 'paused' }),
+      /** The browser refused to start the media (autoplay blocked): show Play, keep rotating. */
+      markBlocked: () => dispatch({ type: 'mediaBlocked' }),
       bind: {
         ref,
         onPointerEnter: () => dispatch({ type: 'hover', value: true }),
@@ -85,7 +85,10 @@ export function useAdRotation(count: number) {
     count: state.count,
     reducedMotion: state.reducedMotion,
     onScreen: state.onScreen,
-    /** Not paused by the shopper (reduced motion counts as paused until they press Play). */
+    /**
+     * The button shows Pause: not paused by the shopper (reduced motion counts as paused until
+     * they press Play) and not refused by the browser.
+     */
     playing: isPlaying(state),
     /** Media should be moving now: playing, on screen, tab visible. */
     animate: shouldAnimate(state),

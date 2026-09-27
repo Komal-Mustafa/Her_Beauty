@@ -14,8 +14,6 @@ type AdCardProps = {
   rotation: AdRotation;
   /** Layers for the media box (posters, videos, the 3D stage), stacked with `absolute inset-0`. */
   media: ReactNode;
-  /** Backdrop of the media box. */
-  mediaClassName?: string;
   /** Pause / Play labels, or null when nothing on the card moves. */
   playControl: { pause: string; play: string } | null;
   className?: string;
@@ -28,15 +26,7 @@ type AdCardProps = {
  *
  * TODO(P9): impression and click tracking.
  */
-export function AdCard({
-  variant,
-  ads,
-  rotation,
-  media,
-  mediaClassName,
-  playControl,
-  className,
-}: AdCardProps) {
+export function AdCard({ variant, ads, rotation, media, playControl, className }: AdCardProps) {
   const multi = ads.length > 1;
   const { ref, ...handlers } = rotation.bind;
 
@@ -49,7 +39,7 @@ export function AdCard({
       aria-label="Sponsored"
       className={cn(adCardClass(variant), className)}
     >
-      <div className={cn(adMediaClass(variant), mediaClassName)}>
+      <div className={adMediaClass(variant)}>
         {media}
         {playControl ? (
           <button
@@ -98,7 +88,10 @@ export function AdCard({
                   block={variant === 'rail'}
                   className={cn('mt-4', variant === 'inline' && 'self-start')}
                 >
-                  <Link href={ad.href}>{ad.ctaLabel}</Link>
+                  {/* No prefetch: the hidden slides would fetch pages the shopper never saw. */}
+                  <Link href={ad.href} prefetch={false}>
+                    {ad.ctaLabel}
+                  </Link>
                 </Button>
               </div>
             );
@@ -122,7 +115,8 @@ export function AdCard({
                 >
                   <span
                     className={cn(
-                      'absolute -inset-px rounded-pill bg-pink-600 transition-[opacity,transform] duration-base ease-soft',
+                      // Tailwind's scale-* sets `scale`, not `transform`; reduced motion: fade only.
+                      'absolute -inset-px rounded-pill bg-pink-600 transition-[opacity,scale] duration-base ease-soft motion-reduce:scale-100',
                       i === rotation.index ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
                     )}
                   />

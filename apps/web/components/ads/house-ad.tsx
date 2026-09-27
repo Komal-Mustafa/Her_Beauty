@@ -33,7 +33,10 @@ export function HouseAd({ variant, className }: { variant: AdVariant; className?
           block={variant === 'rail'}
           className={cn('mt-1', variant === 'inline' && 'self-start')}
         >
-          <Link href="/advertise">See ad packages</Link>
+          {/* No prefetch until the /advertise page exists (P9). */}
+          <Link href="/advertise" prefetch={false}>
+            See ad packages
+          </Link>
         </Button>
       </div>
     </div>

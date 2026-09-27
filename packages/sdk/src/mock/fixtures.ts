@@ -753,7 +753,8 @@ export const servedAds: ServedAd[] = [
     media: {
       kind: 'video',
       url: '/placeholders/video-placeholder.webm',
-      posterUrl: '/placeholders/perfume-2.svg',
+      // The light (-1) posters share the ad media box's backdrop, so they sit seamlessly in-feed.
+      posterUrl: '/placeholders/perfume-1.svg',
       model3dKind: null,
       shadeHex: null,
     },

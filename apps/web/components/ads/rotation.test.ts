@@ -97,9 +97,20 @@ describe('ad rotation', () => {
     expect(apply(running, { type: 'goTo', index: 1 }, { type: 'count', count: 2 }).index).toBe(1);
   });
 
-  it('can be paused by the media itself (autoplay refused)', () => {
-    const s = apply(running, { type: 'setPlay', play: 'paused' });
-    expect(isPlaying(s)).toBe(false);
-    expect(shouldAutoRotate(s)).toBe(false);
+  it('shows Play when autoplay is refused but keeps rotating the other ads', () => {
+    const blocked = apply(running, { type: 'mediaBlocked' });
+    expect(isPlaying(blocked)).toBe(false);
+    expect(shouldAnimate(blocked)).toBe(false);
+    expect(shouldAutoRotate(blocked)).toBe(true);
+    // Rotation moves on without retrying the video until the shopper asks for it.
+    expect(shouldAnimate(apply(blocked, { type: 'next' }))).toBe(false);
+  });
+
+  it('retries a blocked video when the shopper presses Play', () => {
+    const played = apply(running, { type: 'mediaBlocked' }, { type: 'togglePlay' });
+    expect(played.mediaBlocked).toBe(false);
+    expect(played.play).toBe('playing');
+    expect(shouldAnimate(played)).toBe(true);
+    expect(shouldAutoRotate(played)).toBe(true);
   });
 });
