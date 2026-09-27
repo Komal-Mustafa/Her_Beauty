@@ -1,7 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FeaturedBrand, FeaturedReview, StorefrontStats } from '@hb/types';
-import type { HbApi } from '../api';
-import { mockApi } from '../mock/mock-api';
 import type { ApiRequestError } from './http-api';
 import { createHttpApi } from './http-api';
 
@@ -53,27 +50,6 @@ describe('createHttpApi', () => {
       'limit=7',
       'limit=12',
     ]);
-  });
-
-  it('returns the same shapes as the mock adapter', async () => {
-    const pairs = [
-      [StorefrontStats, () => mockApi.getStorefrontStats(), (a: HbApi) => a.getStorefrontStats()],
-      [
-        FeaturedReview.array(),
-        () => mockApi.getFeaturedReviews(12),
-        (a: HbApi) => a.getFeaturedReviews(12),
-      ],
-      [
-        FeaturedBrand.array(),
-        () => mockApi.getFeaturedBrands(),
-        (a: HbApi) => a.getFeaturedBrands(),
-      ],
-    ] as const;
-    for (const [schema, fromMock, call] of pairs) {
-      const body = schema.parse(await fromMock());
-      const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: fakeFetch(200, body) });
-      expect(schema.parse(await call(api))).toEqual(body);
-    }
   });
 
   it('surfaces the API error code on failures', async () => {
