@@ -1,4 +1,4 @@
-import type { HbApi } from '../api';
+import { featuredReviewLimit, type HbApi } from '../api';
 import type { Product, ProductCard, ProductQuery } from '@hb/types';
 import {
   adPackages,
@@ -12,6 +12,7 @@ import {
   sponsoredProductSlugs,
   stores,
 } from './fixtures';
+import { featuredBrands, featuredReviews, storefrontStats } from './home-fixtures';
 
 const DEFAULT_LIMIT = 24;
 
@@ -117,5 +118,14 @@ export const mockApi: HbApi = {
   },
   async getSellingPlans() {
     return sellingPlans;
+  },
+  async getStorefrontStats() {
+    return storefrontStats;
+  },
+  async getFeaturedReviews(limit) {
+    return featuredReviews.slice(0, featuredReviewLimit(limit));
+  },
+  async getFeaturedBrands() {
+    return featuredBrands;
   },
 };
