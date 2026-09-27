@@ -15,6 +15,14 @@ export { TrustStrip } from './components/trust-strip';
 export { EmptyState } from './components/empty-state';
 export { Logo } from './components/logo';
 export { Reveal } from './components/reveal';
+export {
+  ProductCard,
+  type ProductCardImageProps,
+  type ProductCardLinkProps,
+} from './components/product-card';
+export { Carousel } from './components/carousel';
+export { Marquee } from './components/marquee';
+export { CountUp } from './components/count-up';
 export { PasswordInput } from './components/password-input';
 export { CodeInput } from './components/code-input';
 export { Tabs, type TabItem } from './components/tabs';
@@ -22,4 +30,5 @@ export { Alert } from './components/alert';
 export { SubmitButton } from './components/submit-button';
 export { FormAlert } from './components/form-alert';
 export { useFieldErrors, type UseFieldErrorsOptions } from './hooks/use-field-errors';
+export { prefersReducedMotion, usePrefersReducedMotion } from './hooks/use-reduced-motion';
 export { fieldRule, optionalField, type FieldCheck, type FieldErrorMap } from './lib/field-checks';
