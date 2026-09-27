@@ -72,6 +72,15 @@ export function toServedAd(c: CampaignRow, slot: AdSlotCode): ServedAd | null {
   };
 }
 
+/** `ad_packages.features.featuredBrand` ("yes" = Luxe, "top" = Icon); anything else is "none". */
+export function featuredBrandLevel(features: Prisma.JsonValue): AdPackage['featuredBrand'] {
+  const value =
+    typeof features === 'object' && features !== null && !Array.isArray(features)
+      ? features.featuredBrand
+      : undefined;
+  return value === 'yes' || value === 'top' ? value : 'none';
+}
+
 @Injectable()
 export class AdsService {
   constructor(@Inject(PrismaService) private readonly db: PrismaService) {}
@@ -99,7 +108,6 @@ export class AdsService {
     return rows.map((p) => {
       const days = (p.slotDays ?? {}) as Record<string, unknown>;
       const features = (p.features ?? {}) as Record<string, unknown>;
-      const featuredBrand = features.featuredBrand;
       return {
         id: p.id,
         code: p.code as AdPackage['code'],
@@ -112,7 +120,7 @@ export class AdsService {
         slotDays: Object.fromEntries(
           SLOT_DAYS_KEYS.map((k) => [k, typeof days[k] === 'number' ? days[k] : 0]),
         ) as AdPackage['slotDays'],
-        featuredBrand: featuredBrand === 'yes' || featuredBrand === 'top' ? featuredBrand : 'none',
+        featuredBrand: featuredBrandLevel(p.features),
         popular: features.popular === true,
       };
     });

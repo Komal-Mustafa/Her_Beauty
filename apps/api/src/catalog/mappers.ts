@@ -37,6 +37,9 @@ export type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclu
 
 const NEW_FOR_DAYS = 30;
 
+/** Placeholder mark (served by the web apps from /public) when a brand or product has no image. */
+const PLACEHOLDER_MARK = '/placeholders/brand-mark.svg';
+
 export function toCategory(c: {
   id: string;
   slug: string;
@@ -65,7 +68,8 @@ export function toBrand(b: {
     id: b.id,
     slug: b.slug,
     name: b.name,
-    logo: { url: mediaUrl(b.logoKey), alt: `${b.name} logo` },
+    // Asset urls are never empty: a brand without an uploaded logo shows the placeholder mark.
+    logo: { url: mediaUrl(b.logoKey) || PLACEHOLDER_MARK, alt: `${b.name} logo` },
     isProtected: b.isProtected,
     ownerSellerId: b.ownerSellerId,
   };
@@ -124,7 +128,7 @@ export function toProduct(p: ProductRow, sellerRating: number, sponsored: boolea
         }))
       : [
           {
-            url: firstImage ? mediaUrl(firstImage.fileKey) : '/placeholders/brand-mark.svg',
+            url: firstImage ? mediaUrl(firstImage.fileKey) : PLACEHOLDER_MARK,
             alt: p.title,
           },
         ],
