@@ -2,9 +2,10 @@
 
 import type { Category, NavLink } from '@hb/types';
 import { cn, Logo } from '@hb/ui';
-import { ChevronDown, Heart, Menu, Search, ShoppingBag, User } from 'lucide-react';
+import { ChevronDown, Heart, Menu, Search, User } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { CartLink } from './cart-link';
 import { MobileNav } from './mobile-nav';
 import { SearchForm } from './search-form';
 
@@ -144,9 +145,7 @@ export function SiteHeader({ categories, nav }: SiteHeaderProps) {
           >
             <User aria-hidden className="h-5 w-5" />
           </Link>
-          <Link href="/cart" aria-label="Cart" className={iconLink}>
-            <ShoppingBag aria-hidden className="h-5 w-5" />
-          </Link>
+          <CartLink className={iconLink} />
         </div>
       </div>
 
