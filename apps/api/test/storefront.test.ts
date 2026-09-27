@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
 import { z } from 'zod';
-import { createPrismaClient, uuidv7, type SellerOrderStatus, type SellerStatus } from '@hb/db';
+import {
+  createPrismaClient,
+  uuidv7,
+  type SellerOrderStatus,
+  type SellerStatus,
+  type SubStatus,
+} from '@hb/db';
 import { Brand, FeaturedBrand, FeaturedReview, StorefrontStats } from '@hb/types';
 import {
   featuredBrands as fixtureFeaturedBrands,
@@ -144,13 +150,16 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
     return id;
   }
 
-  /** A seller owning one brand, optionally with an ad subscription to `packageCode`. */
+  /**
+   * A seller owning one brand, optionally with an ad subscription to `packageCode`. The period
+   * lasts 30 days and by default started 30 days before it ends.
+   */
   async function seller(
     name: string,
     opts: {
       status?: SellerStatus;
       protectedBrand?: boolean;
-      ad?: { packageCode: string; status?: 'active' | 'cancelled'; endsInDays?: number };
+      ad?: { packageCode: string; status?: SubStatus; startsInDays?: number; endsInDays?: number };
     } = {},
   ) {
     const ownerId = await user(`${name} Owner`);
@@ -180,6 +189,7 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
     if (opts.ad) {
       const pkg = await db.adPackage.findUniqueOrThrow({ where: { code: opts.ad.packageCode } });
       const endsInDays = opts.ad.endsInDays ?? 30;
+      const startsInDays = opts.ad.startsInDays ?? endsInDays - 30;
       const subscriptionId = uuidv7();
       rows.subscriptions.push(subscriptionId);
       await db.adSubscription.create({
@@ -188,7 +198,7 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
           sellerId,
           packageId: pkg.id,
           status: opts.ad.status ?? 'active',
-          currentPeriodStart: new Date(Date.now() + (endsInDays - 30) * DAY),
+          currentPeriodStart: new Date(Date.now() + startsInDays * DAY),
           currentPeriodEnd: new Date(Date.now() + endsInDays * DAY),
         },
       });
@@ -330,18 +340,29 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
         },
       });
       ids.hiddenBrands.push(extra);
-      // Luxe advertisers that must not show: suspended seller, lapsed period, cancelled plan.
-      // Radiance has no featured brand at all.
+      // Luxe advertisers that must not show: suspended seller, lapsed period, period not
+      // started yet, payment past due, cancelled plan. Radiance has no featured brand at all.
       const suspended = await seller('Suspended', {
         status: 'suspended',
         ad: { packageCode: 'luxe' },
       });
       const lapsed = await seller('Lapsed', { ad: { packageCode: 'luxe', endsInDays: -1 } });
+      const upcoming = await seller('Upcoming', {
+        ad: { packageCode: 'luxe', startsInDays: 5, endsInDays: 35 },
+      });
+      const pastDue = await seller('PastDue', { ad: { packageCode: 'luxe', status: 'past_due' } });
       const cancelled = await seller('Cancelled', {
         ad: { packageCode: 'luxe', status: 'cancelled' },
       });
       const basic = await seller('Basic', { ad: { packageCode: 'radiance' } });
-      ids.hiddenBrands.push(suspended.brandId, lapsed.brandId, cancelled.brandId, basic.brandId);
+      ids.hiddenBrands.push(
+        suspended.brandId,
+        lapsed.brandId,
+        upcoming.brandId,
+        pastDue.brandId,
+        cancelled.brandId,
+        basic.brandId,
+      );
 
       const live = await product(icon.sellerId, icon.brandId, 'live');
       const draft = await product(icon.sellerId, icon.brandId, 'draft');
@@ -376,8 +397,9 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
     it('counts only visible sellers, brands and products, and delivered orders', async () => {
       const after = await stats();
       expect(after).toEqual({
-        verifiedSellers: before.verifiedSellers + 4, // Icon, Lapsed, Cancelled, Basic
-        officialBrands: before.officialBrands + 4, // their protected brands
+        // Icon, Lapsed, Upcoming, PastDue, Cancelled, Basic
+        verifiedSellers: before.verifiedSellers + 6,
+        officialBrands: before.officialBrands + 6, // their protected brands
         products: before.products + 1, // the live product of an approved seller
         ordersDelivered: before.ordersDelivered + 3, // 2 delivered + 1 released
       });
