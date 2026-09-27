@@ -5,19 +5,22 @@ import type {
   FeaturedReview,
   StorefrontStats,
 } from '@hb/types';
-import { FEATURED_BRANDS_MAX, FEATURED_REVIEW_MIN_RATING } from '@hb/types';
+import {
+  FEATURED_BRANDS_MAX,
+  FEATURED_REVIEW_MIN_RATING,
+  FEATURED_REVIEWS_SCAN_FACTOR,
+} from '@hb/types';
 import { adPackages, brands, products, reviews, stores } from './fixtures';
 
 /*
  * Mock data for the home page highlights (docs/p4-home.md §6). Everything is derived from the
  * storefront fixtures with the same rules as the API (apps/api/src/storefront), so mock mode and
- * http mode on a freshly seeded database show the same numbers, reviews and brands. Reviews with
- * the same createdAt are ordered by id, and fixture ids are not the seeded UUIDs, so such ties
- * may come in another order in http mode.
+ * http mode on a freshly seeded database show the same numbers, reviews and brands.
  */
 
-/** Descending order for ISO dates and ids (plain code-unit order, like the database). */
-const desc = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
+/** Ascending order for ISO dates, slugs and ids (plain code-unit order, like the database). */
+const asc = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const desc = (a: string, b: string) => asc(b, a);
 
 /**
  * Active ad subscription of each advertiser — mirrors `packageFor` in packages/db/prisma/seed.ts
@@ -48,14 +51,37 @@ export const storefrontStats: StorefrontStats = {
   ordersDelivered: deliveredSellerOrders(),
 };
 
-/** 4–5 star verified reviews with a quote, newest first (id breaks ties). */
-export const featuredReviews: FeaturedReview[] = reviews
+/**
+ * 4–5 star verified reviews with a quote, newest first. Ties (the fixtures share timestamps) go
+ * by product slug like the API; the id is last, and fixture ids are not the seeded UUIDs.
+ */
+const featuredReviewCandidates: FeaturedReview[] = reviews
   .filter((r) => r.rating >= FEATURED_REVIEW_MIN_RATING && r.verifiedPurchase && r.body !== '')
   .flatMap((r) => {
     const product = products.find((p) => p.id === r.productId);
     return product ? [{ ...r, product: { slug: product.slug, title: product.title } }] : [];
   })
-  .sort((a, b) => desc(a.createdAt, b.createdAt) || desc(a.id, b.id));
+  .sort(
+    (a, b) =>
+      desc(a.createdAt, b.createdAt) || asc(a.product.slug, b.product.slug) || desc(a.id, b.id),
+  );
+
+/**
+ * The API's pick: each shopper's newest review, up to `limit`, from the newest
+ * `limit × FEATURED_REVIEWS_SCAN_FACTOR` candidates. The seed gives every review author one
+ * account, so the author name stands for the shopper here.
+ */
+export function featuredReviews(limit: number): FeaturedReview[] {
+  const shoppers = new Set<string>();
+  const picked: FeaturedReview[] = [];
+  for (const r of featuredReviewCandidates.slice(0, limit * FEATURED_REVIEWS_SCAN_FACTOR)) {
+    if (picked.length === limit) break;
+    if (shoppers.has(r.authorName)) continue;
+    shoppers.add(r.authorName);
+    picked.push(r);
+  }
+  return picked;
+}
 
 const PLACEMENT_RANK: Record<FeaturedBrandPlacement, number> = { top: 0, featured: 1 };
 

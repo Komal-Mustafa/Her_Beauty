@@ -21,6 +21,12 @@ export const FEATURED_REVIEWS_DEFAULT = 3;
 export const FEATURED_REVIEWS_MAX = 12;
 /** Stars a review needs to be featured on the home page. */
 export const FEATURED_REVIEW_MIN_RATING = 4;
+/**
+ * Featured reviews show one quote per shopper (their newest), picked from the newest
+ * `limit × FEATURED_REVIEWS_SCAN_FACTOR` eligible reviews so the read stays bounded. A shopper
+ * with more recent reviews than that window can leave fewer than `limit` quotes.
+ */
+export const FEATURED_REVIEWS_SCAN_FACTOR = 4;
 /** Featured brands scroll in a marquee, not a directory: at most this many. */
 export const FEATURED_BRANDS_MAX = 24;
 

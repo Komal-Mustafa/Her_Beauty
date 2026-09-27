@@ -40,7 +40,8 @@ export interface HbApi {
   /** GET /stats/storefront — home trust counters (sellers, official brands, products, orders). */
   getStorefrontStats(): Promise<StorefrontStats>;
   /**
-   * GET /reviews/featured?limit= — newest 4–5 star verified reviews of live products.
+   * GET /reviews/featured?limit= — newest 4–5 star verified reviews of live products, one per
+   * shopper, so there may be fewer than `limit`.
    * `limit` is clamped to 1–12 (default 3) by both adapters, see `featuredReviewLimit`.
    */
   getFeaturedReviews(limit?: number): Promise<FeaturedReview[]>;

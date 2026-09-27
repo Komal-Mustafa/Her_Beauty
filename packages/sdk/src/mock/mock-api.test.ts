@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FeaturedBrand, FeaturedReview, StorefrontStats } from '@hb/types';
+import { reviews } from './fixtures';
 import { mockApi } from './mock-api';
 
 describe('mockApi.getProducts', () => {
@@ -39,26 +40,34 @@ describe('mockApi home highlights', () => {
     expect(stats.ordersDelivered).toBeGreaterThan(0);
   });
 
-  it('features the newest 4–5 star verified reviews, 3 by default', async () => {
-    const reviews = FeaturedReview.array().parse(await mockApi.getFeaturedReviews());
-    expect(reviews).toHaveLength(3);
+  it("features each shopper's newest 4–5 star verified review, newest first", async () => {
     const all = FeaturedReview.array().parse(await mockApi.getFeaturedReviews(12));
+    expect(all.length).toBeGreaterThan(0);
     expect(all.every((r) => r.rating >= 4 && r.verifiedPurchase)).toBe(true);
     const dates = all.map((r) => r.createdAt);
     expect(dates).toEqual([...dates].sort().reverse());
-    expect(reviews).toEqual(all.slice(0, 3));
+    const authors = all.map((r) => r.authorName);
+    expect(new Set(authors).size).toBe(authors.length);
     for (const r of all) {
+      const newer = reviews.filter(
+        (o) => o.authorName === r.authorName && o.rating >= 4 && o.createdAt > r.createdAt,
+      );
+      expect(newer).toEqual([]);
       const product = await mockApi.getProduct(r.product.slug);
       expect(product?.id).toBe(r.productId);
       expect(product?.title).toBe(r.product.title);
     }
+    const byDefault = await mockApi.getFeaturedReviews();
+    expect(byDefault.length).toBeLessThanOrEqual(3);
+    expect(byDefault).toEqual(all.slice(0, byDefault.length));
   });
 
   it('clamps the review limit to 1–12 like the HTTP adapter', async () => {
     expect(await mockApi.getFeaturedReviews(0)).toHaveLength(1);
-    expect(await mockApi.getFeaturedReviews(2.9)).toHaveLength(2);
-    expect((await mockApi.getFeaturedReviews(500)).length).toBeLessThanOrEqual(12);
-    expect(await mockApi.getFeaturedReviews(Number.NaN)).toHaveLength(3);
+    expect(await mockApi.getFeaturedReviews(500)).toEqual(await mockApi.getFeaturedReviews(12));
+    expect(await mockApi.getFeaturedReviews(Number.NaN)).toEqual(
+      await mockApi.getFeaturedReviews(),
+    );
   });
 
   it('features protected brands of Icon then Luxe advertisers', async () => {

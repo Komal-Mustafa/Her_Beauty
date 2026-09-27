@@ -54,10 +54,8 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
       expect(res.headers['cache-control']).toBe('public, max-age=300');
     });
 
-    it('features the newest 4–5 star reviews, 3 by default', async () => {
-      const all = FeaturedReviews.parse(
-        (await api.get('/reviews/featured?limit=12').expect(200)).body,
-      );
+    it("features each shopper's newest 4–5 star review, as in mock mode", async () => {
+      // Ids differ between the seed and the fixtures; everything shown on the page must match.
       const shown = ({ authorName, rating, title, body, createdAt, product }: FeaturedReview) => ({
         authorName,
         rating,
@@ -66,26 +64,17 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
         createdAt,
         product,
       });
+      const featured = async (query: string) =>
+        FeaturedReviews.parse((await api.get(`/reviews/featured${query}`).expect(200)).body);
+      const all = await featured('?limit=12');
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.map(shown)).toEqual(fixtureFeaturedReviews(12).map(shown));
       const dates = all.map((r) => r.createdAt);
       expect(dates).toEqual([...dates].sort().reverse());
-      // Same reviews as mock mode; ties on createdAt are ordered by id, which differ there.
-      const bySameKey = (list: FeaturedReview[]) =>
-        list
-          .map(shown)
-          .sort((a, b) =>
-            `${a.createdAt}|${a.product.slug}|${a.authorName}`.localeCompare(
-              `${b.createdAt}|${b.product.slug}|${b.authorName}`,
-            ),
-          );
-      expect(bySameKey(all)).toEqual(bySameKey(fixtureFeaturedReviews.slice(0, 12)));
-      const byDefault = FeaturedReviews.parse(
-        (await api.get('/reviews/featured').expect(200)).body,
-      );
-      expect(byDefault).toEqual(all.slice(0, 3));
-      const one = FeaturedReviews.parse(
-        (await api.get('/reviews/featured?limit=1').expect(200)).body,
-      );
-      expect(one).toEqual(all.slice(0, 1));
+      const byDefault = await featured('');
+      expect(byDefault.map(shown)).toEqual(fixtureFeaturedReviews(3).map(shown));
+      expect(byDefault).toEqual(all.slice(0, byDefault.length));
+      expect(await featured('?limit=1')).toEqual(all.slice(0, 1));
     });
 
     it('features the brands of Icon ("top") then Luxe ("featured") advertisers', async () => {
@@ -316,6 +305,8 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
     let before: StorefrontStats;
     const ids = {
       shownReview: '',
+      otherShopperReview: '',
+      sameShopperOlderReview: '',
       hiddenReviews: [] as string[],
       topBrand: '',
       hiddenBrands: [] as string[],
@@ -370,9 +361,12 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
       ids.liveSlug = live.slug;
 
       const shopper = await user('Zara Test Buyer');
+      const other = await user('Maya Test Buyer');
       const gone = await user('Gone Buyer', true);
-      const [shown = '', ...hidden] = await order(shopper, icon.sellerId, 'delivered', [
+      const [shown = '', older = '', ...hidden] = await order(shopper, icon.sellerId, 'delivered', [
         { product: live, review: { rating: 5, inDays: 2 } },
+        // Featurable, but Zara is already quoted with her newer review.
+        { product: live, review: { rating: 4, inDays: 1.5 } },
         { product: live, review: { rating: 3, inDays: 3 } },
         { product: live, review: { rating: 5, status: 'hidden', inDays: 3 } },
         { product: live, review: { rating: 5, body: null, inDays: 3 } },
@@ -380,6 +374,10 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
         { product: draft, review: { rating: 5, inDays: 3 } },
       ]);
       ids.shownReview = shown;
+      ids.sameShopperOlderReview = older;
+      [ids.otherShopperReview = ''] = await order(other, icon.sellerId, 'delivered', [
+        { product: live, review: { rating: 4, inDays: 1 } },
+      ]);
       ids.hiddenReviews.push(
         ...hidden,
         ...(await order(shopper, suspended.sellerId, 'delivered', [
@@ -401,7 +399,7 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
         verifiedSellers: before.verifiedSellers + 6,
         officialBrands: before.officialBrands + 6, // their protected brands
         products: before.products + 1, // the live product of an approved seller
-        ordersDelivered: before.ordersDelivered + 3, // 2 delivered + 1 released
+        ordersDelivered: before.ordersDelivered + 4, // 3 delivered + 1 released
       });
     });
 
@@ -416,6 +414,24 @@ describe.skipIf(!hasDb)('storefront highlights', () => {
       expect(reviews.every((r) => r.rating >= 4)).toBe(true);
       const dates = reviews.map((r) => r.createdAt);
       expect(dates).toEqual([...dates].sort().reverse());
+    });
+
+    it('quotes each shopper once, with their newest review', async () => {
+      const reviews = FeaturedReviews.parse(
+        (await api.get('/reviews/featured?limit=12').expect(200)).body,
+      );
+      expect(reviews.slice(0, 2).map((r) => [r.id, r.authorName])).toEqual([
+        [ids.shownReview, 'Zara T.'],
+        [ids.otherShopperReview, 'Maya T.'],
+      ]);
+      expect(reviews.map((r) => r.id)).not.toContain(ids.sameShopperOlderReview);
+      const authors = reviews.map((r) => r.authorName);
+      expect(new Set(authors).size).toBe(authors.length);
+      // limit counts shoppers, not reviews: the second card is the other shopper.
+      const two = FeaturedReviews.parse(
+        (await api.get('/reviews/featured?limit=2').expect(200)).body,
+      );
+      expect(two.map((r) => r.id)).toEqual([ids.shownReview, ids.otherShopperReview]);
     });
 
     it('never returns fields beyond the public types', async () => {

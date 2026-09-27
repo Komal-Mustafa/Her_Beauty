@@ -3,6 +3,7 @@ import type { Prisma, SellerOrderStatus } from '@hb/db';
 import {
   FEATURED_BRANDS_MAX,
   FEATURED_REVIEW_MIN_RATING,
+  FEATURED_REVIEWS_SCAN_FACTOR,
   type FeaturedBrand,
   type FeaturedBrandPlacement,
   type FeaturedReview,
@@ -59,7 +60,8 @@ export class StorefrontService {
    * Newest 4–5 star reviews that are published, have a quote to show, are of a live product of
    * a visible seller, and come from a verified purchase: every review hangs off a bought order
    * item, and here that seller order must also have been delivered. Reviews of deleted accounts
-   * are never showcased.
+   * are never showcased. One quote per shopper (their newest), so a single reviewer never fills
+   * the section; see FEATURED_REVIEWS_SCAN_FACTOR for the bounded window this is picked from.
    */
   async featuredReviews(limit: number): Promise<FeaturedReview[]> {
     const rows = await this.publicRead((tx) =>
@@ -73,15 +75,25 @@ export class StorefrontService {
           orderItem: { sellerOrder: { status: { in: DELIVERED } } },
           customer: { deletedAt: null },
         },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: limit,
+        // Seeded demo reviews share timestamps; the product slug settles those ties the same
+        // way as mock mode (packages/sdk/src/mock/home-fixtures.ts).
+        orderBy: [{ createdAt: 'desc' }, { product: { slug: 'asc' } }, { id: 'desc' }],
+        take: limit * FEATURED_REVIEWS_SCAN_FACTOR,
         include: {
           customer: { select: { fullName: true } },
           product: { select: { slug: true, title: true } },
         },
       }),
     );
-    return rows.map((r) => ({
+    const shoppers = new Set<string>();
+    const picked: typeof rows = [];
+    for (const r of rows) {
+      if (picked.length === limit) break;
+      if (shoppers.has(r.customerId)) continue;
+      shoppers.add(r.customerId);
+      picked.push(r);
+    }
+    return picked.map((r) => ({
       ...toReview(r),
       product: { slug: r.product.slug, title: r.product.title },
     }));

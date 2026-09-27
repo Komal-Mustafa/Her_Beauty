@@ -123,7 +123,7 @@ export const mockApi: HbApi = {
     return storefrontStats;
   },
   async getFeaturedReviews(limit) {
-    return featuredReviews.slice(0, featuredReviewLimit(limit));
+    return featuredReviews(featuredReviewLimit(limit));
   },
   async getFeaturedBrands() {
     return featuredBrands;
