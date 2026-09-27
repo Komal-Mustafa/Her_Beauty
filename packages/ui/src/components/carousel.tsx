@@ -122,11 +122,19 @@ export function Carousel({
           </ArrowButton>
         </div>
       </div>
+      {/*
+        data-lenis-prevent-horizontal: Lenis (smooth scroll) would take a trackpad swipe, which
+        always has some vertical delta, for the page; mostly-sideways wheels stay native here.
+        The padding is room for the lifted card's shadow, given back with negative margins; the
+        track is not positioned, so that overhang never sits above the content around it.
+      */}
       <ul
         ref={trackRef}
         id={trackId}
+        data-lenis-prevent-horizontal
         className={cn(
-          'relative -mx-2 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain scroll-px-2 px-2 pb-6 pt-3 md:gap-6',
+          'flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain md:gap-6',
+          '-mx-4 scroll-px-4 px-4 md:-mx-6 md:scroll-px-6 md:px-6 -mb-8 pb-14 pt-3',
           '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
           'data-[dragging=true]:cursor-grabbing data-[dragging=true]:select-none data-[dragging=true]:[&>li]:pointer-events-none',
         )}
@@ -170,10 +178,16 @@ function ArrowButton({ label, controls, disabled, onClick, children }: ArrowButt
   );
 }
 
+/** A slide's left edge in the track's scroll coordinates (the track is not an offsetParent). */
+function slideLeft(el: HTMLElement, item: HTMLElement): number {
+  const track = el.getBoundingClientRect();
+  return item.getBoundingClientRect().left - track.left - el.clientLeft + el.scrollLeft;
+}
+
 /** Left scroll offset that aligns a slide with the snap edge. */
 function snapLeft(el: HTMLElement, item: HTMLElement): number {
   const pad = Number.parseFloat(getComputedStyle(el).scrollPaddingLeft) || 0;
-  return item.offsetLeft - pad;
+  return slideLeft(el, item) - pad;
 }
 
 function clampScroll(el: HTMLElement, left: number): number {
@@ -185,7 +199,7 @@ function pageTarget(el: HTMLElement, dir: 1 | -1): number {
   const items = Array.from(el.children) as HTMLElement[];
   if (dir > 0) {
     const edge = el.scrollLeft + el.clientWidth;
-    const next = items.find((li) => li.offsetLeft + li.offsetWidth > edge + 1);
+    const next = items.find((li) => slideLeft(el, li) + li.offsetWidth > edge + 1);
     return clampScroll(el, next ? snapLeft(el, next) : el.scrollWidth);
   }
   const target = el.scrollLeft - el.clientWidth;

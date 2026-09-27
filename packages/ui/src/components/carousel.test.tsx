@@ -51,6 +51,11 @@ describe('Carousel', () => {
     expect(prev.hasAttribute('disabled')).toBe(false);
   });
 
+  it('leaves sideways wheel gestures to the track, not to smooth scroll (Lenis)', () => {
+    renderCarousel();
+    expect(track().hasAttribute('data-lenis-prevent-horizontal')).toBe(true);
+  });
+
   it('pages with the next button and enables prev once scrolled', () => {
     renderCarousel();
     const el = track();
@@ -58,11 +63,19 @@ describe('Carousel', () => {
     el.scrollTo = scrollTo;
     Object.defineProperty(el, 'scrollWidth', { configurable: true, value: 2400 });
     Object.defineProperty(el, 'clientWidth', { configurable: true, value: 600 });
+    // Slides 280 px wide every 300 px, drawn where the track's scroll puts them.
+    screen.getAllByRole('listitem').forEach((li, i) => {
+      Object.defineProperty(li, 'offsetWidth', { configurable: true, value: 280 });
+      li.getBoundingClientRect = () =>
+        DOMRect.fromRect({ x: i * 300 - el.scrollLeft, y: 0, width: 280, height: 400 });
+    });
     fireEvent.scroll(el);
     const next = screen.getByRole('button', { name: 'Next' });
     expect(next.getAttribute('aria-disabled')).toBe('false');
     fireEvent.click(next);
+    // Slide 3 (600–880) is the first one cut off on the right.
     expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ left: 600 }));
 
     el.scrollLeft = 1800;
     fireEvent.scroll(el);
