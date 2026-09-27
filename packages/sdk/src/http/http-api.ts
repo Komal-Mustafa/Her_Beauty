@@ -1,4 +1,4 @@
-import type { HbApi } from '../api';
+import { featuredReviewLimit, type HbApi } from '../api';
 import type { ProductQuery } from '@hb/types';
 
 export class ApiRequestError extends Error {
@@ -75,5 +75,8 @@ export function createHttpApi({
     getHeroScenes: () => get('/cms/hero-scenes'),
     getAdPackages: () => get('/ads/packages'),
     getSellingPlans: () => get('/plans'),
+    getStorefrontStats: () => get('/stats/storefront'),
+    getFeaturedReviews: (limit) => get(`/reviews/featured?limit=${featuredReviewLimit(limit)}`),
+    getFeaturedBrands: () => get('/brands/featured'),
   };
 }

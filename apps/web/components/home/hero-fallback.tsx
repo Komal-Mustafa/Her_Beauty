@@ -11,9 +11,13 @@ import { SITE } from '@/lib/site';
 export function HeroFallback({ scene }: { scene: HeroScene | undefined }) {
   return (
     <section aria-labelledby="hero-title" className="relative overflow-hidden bg-grad-pink">
+      {/*
+        From 1024 px it fills the first screen below the header, so nothing under the hero is in
+        view when the cinematic film replaces it on mid/high tier (no layout shift is counted).
+      */}
       <Container
         wide
-        className="grid min-h-[80vh] items-center gap-10 py-16 md:grid-cols-2 md:py-24"
+        className="grid min-h-[80vh] items-center gap-10 py-16 md:min-h-[calc(100svh-6rem)] md:grid-cols-2 md:py-24"
       >
         <div className="relative z-10 max-w-xl animate-rise">
           <p className="eyebrow mb-4 text-gold-800">Her Beauty</p>

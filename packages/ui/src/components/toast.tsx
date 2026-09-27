@@ -13,7 +13,14 @@ import {
 import { cn } from '../lib/cn';
 
 type ToastTone = 'success' | 'warning' | 'danger' | 'info';
-type ToastItem = { id: number; tone: ToastTone; title: string; body?: string };
+type ToastItem = {
+  id: number;
+  tone: ToastTone;
+  title: string;
+  body?: string;
+  /** One follow-up action, e.g. the app's `<Link href="/cart">View cart</Link>`. */
+  action?: ReactNode;
+};
 type ToastApi = { show: (t: Omit<ToastItem, 'id'>) => void };
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -76,6 +83,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink-900">{t.title}</p>
                 {t.body && <p className="mt-0.5 text-sm text-ink-500">{t.body}</p>}
+                {t.action && (
+                  <div className="-mb-2 mt-1 text-sm font-medium text-pink-600 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:underline-offset-4 [&_a:hover]:text-pink-700 [&_a:hover]:underline">
+                    {t.action}
+                  </div>
+                )}
               </div>
               <button
                 type="button"

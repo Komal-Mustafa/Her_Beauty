@@ -240,9 +240,9 @@ verb-first buttons, keyboard accessible, 360 px mobile):
 
 ## 8. Seed (dev only)
 
-- `SEED_DEMO_PASSWORD` (optional): when set, seeded store owners (`owner@<slug>.test`), the two customers
-  (`ayesha@hb.test`, `sana@hb.test`) and the super admin get this password; unset ⇒ accounts have no password
-  (OTP only). Never a default value in code.
+- `SEED_DEMO_PASSWORD` (optional): when set, seeded store owners (`owner@<slug>.test`), the five
+  demo customers (`ayesha@`, `sana@`, `mehwish@`, `hira@`, `fatima@hb.test`) and the super admin
+  get this password; unset ⇒ accounts have no password (OTP only). Never a default value in code.
 - Super admin (`SEED_ADMIN_EMAIL`) is created without 2FA, so the first admin login walks through enrolment.
 
 ## 9. Environment variables (add to `.env.example` with fake values)

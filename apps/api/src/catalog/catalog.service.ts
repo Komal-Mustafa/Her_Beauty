@@ -23,10 +23,18 @@ const MAX_SCAN = 2000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Only approved, non-deleted sellers are visible on the storefront. */
-const LIVE_SELLER = { status: 'approved', deletedAt: null } satisfies Prisma.SellerWhereInput;
+export const LIVE_SELLER = {
+  status: 'approved',
+  deletedAt: null,
+} satisfies Prisma.SellerWhereInput;
+
+/** Storefront-visible brands: a brand whose owning seller is hidden is hidden with it. */
+export const VISIBLE_BRAND = {
+  OR: [{ ownerSellerId: null }, { ownerSeller: LIVE_SELLER }],
+} satisfies Prisma.BrandWhereInput;
 
 /** Storefront-visible products: live, not deleted, and sold by a visible seller. */
-const LIVE = {
+export const LIVE = {
   status: 'live',
   deletedAt: null,
   seller: LIVE_SELLER,
@@ -70,12 +78,16 @@ export class CatalogService {
   }
 
   async brands() {
-    const rows = await this.db.brand.findMany({ orderBy: { name: 'asc' } });
+    const rows = await this.publicRead((tx) =>
+      tx.brand.findMany({ where: VISIBLE_BRAND, orderBy: { name: 'asc' } }),
+    );
     return rows.map(toBrand);
   }
 
   async brand(slug: string) {
-    const row = await this.db.brand.findUnique({ where: { slug } });
+    const row = await this.publicRead((tx) =>
+      tx.brand.findFirst({ where: { slug, ...VISIBLE_BRAND } }),
+    );
     if (!row) throw notFound('Brand');
     return toBrand(row);
   }

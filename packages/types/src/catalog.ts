@@ -98,6 +98,11 @@ export const ProductCard = z.object({
   isNew: z.boolean(),
   /** True when shown because of a paid sponsored_product slot — must render "Sponsored". */
   sponsored: z.boolean(),
+  /**
+   * One-click "Add to cart" target: the product's only variant, while it is in stock. Null when
+   * the shopper must pick a shade or size on the product page (or nothing is in stock).
+   */
+  quickAddVariantId: Id.nullable(),
 });
 export type ProductCard = z.infer<typeof ProductCard>;
 

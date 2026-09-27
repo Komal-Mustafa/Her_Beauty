@@ -46,7 +46,18 @@ const log = (msg: string) => process.stdout.write(`[seed] ${msg}\n`);
 const DEMO_CUSTOMERS: Record<string, { fullName: string; email: string }> = {
   'Ayesha K.': { fullName: 'Ayesha Khan', email: 'ayesha@hb.test' },
   'Sana R.': { fullName: 'Sana Riaz', email: 'sana@hb.test' },
+  'Mehwish A.': { fullName: 'Mehwish Ali', email: 'mehwish@hb.test' },
+  'Hira S.': { fullName: 'Hira Shah', email: 'hira@hb.test' },
+  'Fatima Z.': { fullName: 'Fatima Zaidi', email: 'fatima@hb.test' },
 };
+
+/** "Mehwish A." → "mehwish.a": letters and digits joined by single dots (a valid local part). */
+function emailLocalPart(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+}
 
 /** Argon2id hash of SEED_DEMO_PASSWORD (same parameters as the API), or null when unset. */
 async function demoPasswordHash(): Promise<string | null> {
@@ -324,7 +335,7 @@ async function seedReviews(db: Prisma.TransactionClient) {
     await db.user.create({
       data: {
         id: customerId,
-        email: demo?.email ?? `${fullName.toLowerCase().replace(/\s+/g, '.')}@customer.test`,
+        email: demo?.email ?? `${emailLocalPart(fullName)}@customer.test`,
         phone: `+9230000000${String(orderNo).padStart(2, '0')}`,
         fullName,
         passwordHash,

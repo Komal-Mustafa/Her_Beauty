@@ -16,6 +16,8 @@ import { HealthController } from './health/health.controller';
 import { MessagingModule } from './messaging/messaging.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SellerModule } from './seller/seller.module';
+import { StorefrontController } from './storefront/storefront.controller';
+import { StorefrontService } from './storefront/storefront.service';
 
 @Module({
   imports: [
@@ -29,10 +31,12 @@ import { SellerModule } from './seller/seller.module';
     SellerModule,
     AdminModule,
   ],
-  controllers: [HealthController, CatalogController, AdsController],
+  // StorefrontController before CatalogController: `brands/featured` must win over `brands/:slug`.
+  controllers: [HealthController, StorefrontController, CatalogController, AdsController],
   providers: [
     CatalogService,
     AdsService,
+    StorefrontService,
     { provide: APP_FILTER, useClass: ApiExceptionFilter },
     // Order matters: throttle first (also unauthenticated floods), then default-deny auth.
     { provide: APP_GUARD, useClass: ApiThrottlerGuard },
