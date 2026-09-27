@@ -547,30 +547,57 @@ function toProduct(seed: Seed, index: number): Product {
 
 export const products: Product[] = seeds.map(toProduct);
 
-export const reviews: Review[] = products.slice(0, 6).flatMap((p, i) => [
+/** Demo shoppers and what they said (the seed makes one account per author). */
+const REVIEW_VOICES = [
   {
-    id: `rev-${i}-1`,
-    productId: p.id,
     authorName: 'Ayesha K.',
     rating: 5,
     title: 'Looks exactly like the pictures',
     body: 'Beautiful packaging and the colour is perfect for everyday wear.',
-    photos: [],
-    verifiedPurchase: true as const,
-    createdAt: '2026-09-10T10:00:00.000Z',
   },
   {
-    id: `rev-${i}-2`,
-    productId: p.id,
     authorName: 'Sana R.',
     rating: 4,
     title: 'Genuine product, fast delivery',
     body: 'Arrived in three days and was sealed. Would buy again.',
-    photos: [],
-    verifiedPurchase: true as const,
-    createdAt: '2026-09-15T10:00:00.000Z',
   },
-]);
+  {
+    authorName: 'Mehwish A.',
+    rating: 5,
+    title: 'Lasts through a long day',
+    body: 'Wore it from a morning class to a family dinner and it still looked fresh.',
+  },
+  {
+    authorName: 'Hira S.',
+    rating: 5,
+    title: 'My new favourite',
+    body: 'Gentle on my skin and it suits my undertone. The seller packed it with real care.',
+  },
+  {
+    authorName: 'Fatima Z.',
+    rating: 4,
+    title: 'Worth every rupee',
+    body: 'Good quality for the price, and knowing my payment was protected made ordering easy.',
+  },
+] as const;
+
+/**
+ * Two reviews on each of the first six products, from different shoppers. Each product's first
+ * review is from the last week, so the newest reviews are spread across products and shoppers.
+ */
+export const reviews: Review[] = products.slice(0, 6).flatMap((p, i) =>
+  [i % REVIEW_VOICES.length, (i + 2) % REVIEW_VOICES.length].map((v, k) => {
+    const voice = REVIEW_VOICES[v] ?? REVIEW_VOICES[0];
+    return {
+      id: `rev-${i}-${k + 1}`,
+      productId: p.id,
+      ...voice,
+      photos: [],
+      verifiedPurchase: true as const,
+      createdAt: `2026-09-${20 - k * 10 + i}T10:00:00.000Z`,
+    };
+  }),
+);
 
 export const adPackages: AdPackage[] = [
   {
