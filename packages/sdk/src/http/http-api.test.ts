@@ -22,6 +22,38 @@ describe('createHttpApi', () => {
     );
   });
 
+  it('sends search filters as the API reads them: arrays by commas, booleans as true/false', async () => {
+    const f = fakeFetch(200, {});
+    const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: f });
+    await api.search({
+      q: 'rose & gold',
+      shade: ['red', 'berry'],
+      onSale: true,
+      isNew: false,
+      page: 2,
+      pageSize: 48,
+    });
+    await api.search();
+    await api.getProducts({ ids: ['a', 'b'], onSale: false });
+    expect(f.mock.calls.map(([url]) => url)).toEqual([
+      'http://api.test/v1/search?q=rose+%26+gold&shade=red%2Cberry&onSale=true&isNew=false&page=2&pageSize=48',
+      'http://api.test/v1/search',
+      'http://api.test/v1/products?ids=a%2Cb&onSale=false',
+    ]);
+  });
+
+  it('asks for a delivery estimate by product and city, null when the product is gone', async () => {
+    const f = fakeFetch(200, { zone: 'same_city' });
+    const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: f });
+    await api.getDeliveryEstimate('velvet-matte-lipstick', 'Rawalpindi');
+    expect(f).toHaveBeenCalledWith(
+      'http://api.test/v1/products/velvet-matte-lipstick/delivery?city=Rawalpindi',
+      expect.anything(),
+    );
+    const gone = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: fakeFetch(404, {}) });
+    await expect(gone.getDeliveryEstimate('nope', 'Lahore')).resolves.toBeNull();
+  });
+
   it('returns null for a missing product instead of throwing', async () => {
     const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: fakeFetch(404, {}) });
     await expect(api.getProduct('nope')).resolves.toBeNull();

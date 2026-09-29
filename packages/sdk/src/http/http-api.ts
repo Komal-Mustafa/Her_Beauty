@@ -1,5 +1,5 @@
 import { featuredReviewLimit, type HbApi } from '../api';
-import type { ProductQuery } from '@hb/types';
+import type { ProductQuery, SearchQuery } from '@hb/types';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -21,7 +21,8 @@ type HttpApiOptions = {
   revalidate?: number;
 };
 
-function queryString(q: ProductQuery): string {
+/** Arrays are comma-separated, booleans `true`/`false` (docs/p5-catalog.md §3.3). */
+function queryString(q: ProductQuery | SearchQuery): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(q)) {
     if (value === undefined || value === null || value === '') continue;
@@ -66,7 +67,10 @@ export function createHttpApi({
     getBrands: () => get('/brands'),
     getBrand: (slug) => get(`/brands/${enc(slug)}`, { nullOn404: true }),
     getProducts: (query = {}) => get(`/products${queryString(query)}`),
+    search: (query = {}) => get(`/search${queryString(query)}`),
     getProduct: (slug) => get(`/products/${enc(slug)}`, { nullOn404: true }),
+    getDeliveryEstimate: (productSlug, city) =>
+      get(`/products/${enc(productSlug)}/delivery?city=${enc(city)}`, { nullOn404: true }),
     getReviews: (productId) => get(`/reviews?productId=${enc(productId)}`),
     getStore: (slug) => get(`/stores/${enc(slug)}`, { nullOn404: true }),
     getStores: () => get('/stores'),
