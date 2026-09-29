@@ -1,5 +1,7 @@
 export * from './common';
 export * from './catalog';
+export * from './search';
+export * from './delivery';
 export * from './ads';
 export * from './orders';
 export * from './plans';

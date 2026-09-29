@@ -131,6 +131,22 @@ export const Review = z.object({
 });
 export type Review = z.infer<typeof Review>;
 
+/**
+ * Shade families for the shade filter (docs/p5-catalog.md §4.3). A variant's family comes from
+ * its hex (`shadeFamily`); every family has a swatch colour and a label next to that function.
+ */
+export const ShadeFamily = z.enum([
+  'nude',
+  'pink',
+  'red',
+  'berry',
+  'coral',
+  'mauve',
+  'brown',
+  'gold',
+]);
+export type ShadeFamily = z.infer<typeof ShadeFamily>;
+
 export const ProductSort = z.enum([
   'relevance',
   'newest',
@@ -138,6 +154,8 @@ export const ProductSort = z.enum([
   'price_desc',
   'rating',
   'best_selling',
+  /** Biggest % off first. */
+  'discount',
 ]);
 export type ProductSort = z.infer<typeof ProductSort>;
 
@@ -148,11 +166,78 @@ export const ProductQuery = z.object({
   seller: Slug.optional(),
   sellerType: SellerType.optional(),
   skinType: z.array(SkinType).optional(),
+  /** Any variant's shade is in one of these families. */
+  shade: z.array(ShadeFamily).optional(),
   minPrice: Money.optional(),
   maxPrice: Money.optional(),
   minRating: z.number().min(0).max(5).optional(),
+  /** true = only products on sale (compare-at above the price), false = only full price. */
+  onSale: z.boolean().optional(),
+  /** true = only new products, false = only the rest. */
+  isNew: z.boolean().optional(),
+  /** Exactly these products, in this order; hidden or unknown ids are skipped. */
+  ids: z.array(Id).min(1).max(50).optional(),
   sort: ProductSort.optional(),
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),
 });
 export type ProductQuery = z.infer<typeof ProductQuery>;
+
+// ---------- search: filters, facets, sort, numbered pages (docs/p5-catalog.md §3.1) ----------
+
+export const SEARCH_PAGE_SIZE = 24;
+export const SEARCH_PAGE_SIZE_MAX = 48;
+/** With the default ordering, at most this many sponsored products move to the top. */
+export const SEARCH_SPONSORED_PINS = 2;
+
+/** GET /search — every listing page (category, search, new, offers, brand, store). */
+export const SearchQuery = ProductQuery.omit({ cursor: true, limit: true, ids: true }).extend({
+  page: z.number().int().min(1).max(500).optional(),
+  pageSize: z.number().int().min(1).max(SEARCH_PAGE_SIZE_MAX).optional(),
+});
+export type SearchQuery = z.infer<typeof SearchQuery>;
+
+export const FacetOption = z.object({
+  value: z.string(),
+  label: z.string(),
+  count: z.number().int().nonnegative(),
+});
+export type FacetOption = z.infer<typeof FacetOption>;
+
+/** A shade family with the swatch colour to draw for it. */
+export const ShadeFacetOption = FacetOption.extend({ hex: HexColor });
+export type ShadeFacetOption = z.infer<typeof ShadeFacetOption>;
+
+/**
+ * Disjunctive counts: each group counts with every filter except its own, so ticking a second
+ * brand still shows how many products it adds. Options with 0 results are included.
+ */
+export const ProductFacets = z.object({
+  /** value = category slug, label = name, in category order. */
+  categories: z.array(FacetOption),
+  /** value = brand slug, sorted by label. */
+  brands: z.array(FacetOption),
+  /** value = ShadeFamily, in enum order. */
+  shades: z.array(ShadeFacetOption),
+  /** value = SkinType, in enum order. */
+  skinTypes: z.array(FacetOption),
+  /** value = SellerType, in enum order. */
+  sellerTypes: z.array(FacetOption),
+  /** value '4' and '3' = rated n and up. */
+  ratings: z.array(FacetOption),
+  /** Products on sale. */
+  onSale: z.number().int().nonnegative(),
+  /** Cheapest and dearest price with every filter except price; null when nothing matches. */
+  price: z.object({ min: Money, max: Money }).nullable(),
+});
+export type ProductFacets = z.infer<typeof ProductFacets>;
+
+export const SearchResult = z.object({
+  items: z.array(ProductCard),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().min(1),
+  pageCount: z.number().int().nonnegative(),
+  facets: ProductFacets,
+});
+export type SearchResult = z.infer<typeof SearchResult>;
