@@ -1,12 +1,14 @@
 import type { Prisma } from '@hb/db';
-import type {
-  Brand,
-  Category,
-  Product,
-  ProductCard,
-  Review,
-  SellerSummary,
-  Store,
+import {
+  DEFAULT_SHIPPING_PROFILE,
+  DeliveryZone,
+  type Brand,
+  type Category,
+  type Product,
+  type Review,
+  type SellerSummary,
+  type ShippingProfile,
+  type Store,
 } from '@hb/types';
 import { mediaUrl, money, proceduralKind } from '../common/media';
 
@@ -176,19 +178,49 @@ export function toProduct(p: ProductRow, sellerRating: number, sponsored: boolea
   };
 }
 
-export function toCard(p: Product): ProductCard {
-  const {
-    descriptionHtml: _d,
-    howToUse: _h,
-    ingredients: _i,
-    skinTypes: _s,
-    tags: _t,
-    variants: _v,
-    media: _m,
-    soldCount: _c,
-    ...card
-  } = p;
-  return card;
+/** A seller's city, shipping_settings and shipping_rates, for delivery estimates. */
+export const shippingProfileSelect = {
+  city: true,
+  shippingSettings: { select: { handlingDays: true, freeShippingMin: true, codEnabled: true } },
+  shippingRates: {
+    select: {
+      zone: true,
+      minWeightG: true,
+      maxWeightG: true,
+      price: true,
+      estDaysMin: true,
+      estDaysMax: true,
+    },
+  },
+} satisfies Prisma.SellerSelect;
+
+type ShippingRow = Prisma.SellerGetPayload<{ select: typeof shippingProfileSelect }>;
+
+/** No shipping_settings row = the column defaults; a rate with an unknown zone is ignored. */
+export function toShippingProfile(s: ShippingRow): ShippingProfile {
+  const settings = s.shippingSettings;
+  return {
+    handlingDays: settings?.handlingDays ?? DEFAULT_SHIPPING_PROFILE.handlingDays,
+    freeShippingMin:
+      settings?.freeShippingMin !== null && settings?.freeShippingMin !== undefined
+        ? money(settings.freeShippingMin)
+        : null,
+    codEnabled: settings?.codEnabled ?? DEFAULT_SHIPPING_PROFILE.codEnabled,
+    rates: s.shippingRates.flatMap((r) => {
+      const zone = DeliveryZone.safeParse(r.zone);
+      if (!zone.success) return [];
+      return [
+        {
+          zone: zone.data,
+          minWeightG: r.minWeightG,
+          maxWeightG: r.maxWeightG,
+          price: money(r.price),
+          daysMin: r.estDaysMin,
+          daysMax: r.estDaysMax,
+        },
+      ];
+    }),
+  };
 }
 
 export function toReview(r: {

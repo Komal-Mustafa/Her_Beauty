@@ -189,13 +189,16 @@ describe.skipIf(!hasDb)('Her Beauty API (catalog + ads)', () => {
       expect(prices).toEqual([...prices].sort((a, b) => b - a));
     });
 
-    it('searches title, brand and store name', async () => {
+    it('searches title, brand and store name (typo-tolerant, see p5-catalog.test.ts)', async () => {
       const res = await api().get('/v1/products?q=ROSE&limit=100').expect(200);
-      const items = Page(ProductCard).parse(res.body).items;
-      expect(items.length).toBeGreaterThan(0);
-      for (const p of items) {
-        expect(`${p.title} ${p.brand.name} ${p.seller.storeName}`.toLowerCase()).toContain('rose');
-      }
+      const slugs = Page(ProductCard)
+        .parse(res.body)
+        .items.map((p) => p.slug);
+      const named = fixtureProducts.filter((p) =>
+        `${p.title} ${p.brand.name} ${p.seller.storeName}`.toLowerCase().includes('rose'),
+      );
+      expect(named.length).toBeGreaterThan(0);
+      expect(slugs).toEqual(expect.arrayContaining(named.map((p) => p.slug)));
     });
 
     it('labels sponsored products', async () => {
