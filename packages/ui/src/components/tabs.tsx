@@ -12,7 +12,8 @@ import { cn } from '../lib/cn';
 
 export type TabItem = {
   id: string;
-  label: string;
+  /** Text, or text with a small decoration such as a badge (the product gallery's "3D" chip). */
+  label: ReactNode;
   /**
    * Optional URL for this tab (e.g. "?method=otp"). Tabs then render as links, so switching
    * works without JavaScript (the server renders the chosen tab); with JavaScript the switch is
