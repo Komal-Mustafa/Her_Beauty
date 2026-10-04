@@ -1,0 +1,300 @@
+// @vitest-environment jsdom
+import type { Product } from '@hb/types';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CART_STORAGE_KEY, MAX_LINES, type CartLine } from '@/lib/cart-store';
+import { WISHLIST_STORAGE_KEY } from '@/lib/wishlist-store';
+import { lipOil, lipstick, perfume } from './test-product';
+
+// The flight itself is covered in lib/fly-to-cart.test.ts; here only that it is asked for.
+const fly = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/fly-to-cart', () => ({ flyToCart: fly }));
+
+const PAGE = '/product/velvet-matte-lipstick';
+
+/** A fresh page (new stores): the header's cart link, the buy box and the sticky bar. */
+async function renderBuyBox(product: Product = lipstick(), shade?: string) {
+  vi.resetModules();
+  const [{ ToastProvider }, { ProductProvider }, { BuyBox }, { StickyBuyBar }, { CartLink }, sel] =
+    await Promise.all([
+      import('@hb/ui'),
+      import('./product-context'),
+      import('./buy-box'),
+      import('./sticky-buy-bar'),
+      import('../layout/cart-link'),
+      import('./variant-selection'),
+    ]);
+  render(
+    <ToastProvider>
+      <CartLink />
+      <ProductProvider product={product} initialVariantId={sel.initialVariant(product, shade).id}>
+        <section aria-label="Buy box">
+          <BuyBox />
+        </section>
+        <StickyBuyBar />
+      </ProductProvider>
+    </ToastProvider>,
+  );
+}
+
+const box = () => within(screen.getByRole('region', { name: 'Buy box' }));
+const bar = () => document.querySelector<HTMLElement>('.sticky > div')!;
+const input = () => box().getByLabelText('Quantity') as HTMLInputElement;
+const toast = () => screen.getByRole('status');
+const storedCart = (): CartLine[] =>
+  JSON.parse(window.localStorage.getItem(CART_STORAGE_KEY) ?? '[]') as CartLine[];
+
+/** Captures the sticky bar's observer so a test can say where the buy box button is. */
+const observers: { callback: IntersectionObserverCallback; targets: Element[] }[] = [];
+class FakeIntersectionObserver {
+  private readonly entry: (typeof observers)[number];
+  constructor(callback: IntersectionObserverCallback) {
+    this.entry = { callback, targets: [] };
+    observers.push(this.entry);
+  }
+  observe(el: Element) {
+    this.entry.targets.push(el);
+  }
+  unobserve() {}
+  disconnect() {
+    this.entry.targets = [];
+  }
+  takeRecords() {
+    return [];
+  }
+}
+
+/** Reports the observed button as on screen, above the viewport or below it. */
+function mainButtonIs(where: 'visible' | 'above' | 'below') {
+  const live = observers.filter((o) => o.targets.length > 0).at(-1)!;
+  const entry = {
+    isIntersecting: where === 'visible',
+    boundingClientRect: { top: where === 'above' ? -120 : where === 'below' ? 900 : 300 },
+    target: live.targets[0],
+  } as unknown as IntersectionObserverEntry;
+  act(() => live.callback([entry], {} as IntersectionObserver));
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  window.history.replaceState(null, '', PAGE);
+  fly.mockClear();
+  observers.length = 0;
+  vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe('BuyBox', () => {
+  it('shows the brand, title, rating link and the chosen shade', async () => {
+    await renderBuyBox();
+    expect(box().getByRole('heading', { level: 1 }).textContent).toBe('Velvet Matte Lipstick');
+    expect(box().getByRole('link', { name: 'Glow' }).getAttribute('href')).toBe('/brand/glow');
+    const rating = box().getByRole('link', { name: /214 ratings/ });
+    expect(rating.getAttribute('href')).toBe('#reviews');
+    expect(box().getByRole('radio', { name: 'Berry Kiss' }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(box().getByRole('radio', { name: 'Nude Silk, sold out' })).toBeTruthy();
+  });
+
+  it('says "No ratings yet" for a product nobody has rated', async () => {
+    await renderBuyBox(lipstick({ rating: 0, ratingCount: 0 }));
+    expect(box().getByRole('link', { name: 'No ratings yet' })).toBeTruthy();
+  });
+
+  it('adds the chosen shade and quantity, counts it in the header and flies from the button', async () => {
+    await renderBuyBox();
+    fireEvent.click(box().getByRole('button', { name: 'Increase quantity' }));
+    fireEvent.click(box().getByRole('button', { name: 'Increase quantity' }));
+    const add = box().getByRole('button', { name: 'Add to cart' });
+    fireEvent.click(add);
+
+    expect(storedCart()).toEqual([
+      {
+        variantId: 'velvet-v1',
+        productSlug: 'velvet-matte-lipstick',
+        title: 'Velvet Matte Lipstick, Berry Kiss',
+        image: '/placeholders/lipstick-1.svg',
+        unitPrice: 185000,
+        qty: 3,
+      },
+    ]);
+    expect(screen.getByRole('link', { name: 'Cart, 3 items' })).toBeTruthy();
+    expect(within(toast()).getByText('Added to cart')).toBeTruthy();
+    expect(within(toast()).getByText('3 × Velvet Matte Lipstick, Berry Kiss')).toBeTruthy();
+    expect(fly).toHaveBeenCalledTimes(1);
+    expect(fly).toHaveBeenCalledWith({
+      imageSrc: '/placeholders/lipstick-1.svg',
+      from: [null, add],
+    });
+  });
+
+  it('says so and does not fly when the cart cannot take the item', async () => {
+    const full = Array.from({ length: MAX_LINES }, (_, i) => ({
+      variantId: `v-${i}`,
+      productSlug: 'other',
+      title: 'Other',
+      image: '/placeholders/serum-1.svg',
+      unitPrice: 1000,
+      qty: 1,
+    }));
+    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(full));
+    await renderBuyBox();
+    fireEvent.click(box().getByRole('button', { name: 'Add to cart' }));
+    expect(within(toast()).getByText('Your cart is full')).toBeTruthy();
+    expect(fly).not.toHaveBeenCalled();
+  });
+
+  it('writes a shade change to ?shade= in place, keeping other parameters', async () => {
+    window.history.replaceState(null, '', `${PAGE}?tier=mid`);
+    const entries = window.history.length;
+    await renderBuyBox();
+    fireEvent.click(box().getByRole('radio', { name: 'Rose Petal' }));
+    expect(box().getByRole('radio', { name: 'Rose Petal' }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(window.location.pathname).toBe(PAGE);
+    expect(window.location.search).toBe('?tier=mid&shade=rose-petal');
+    expect(window.history.length).toBe(entries);
+
+    fireEvent.click(box().getByRole('button', { name: 'Add to cart' }));
+    expect(storedCart()[0]).toMatchObject({
+      variantId: 'velvet-v2',
+      title: 'Velvet Matte Lipstick, Rose Petal',
+    });
+  });
+
+  it('shows a sold-out shade from the URL with the out-of-stock state', async () => {
+    await renderBuyBox(lipstick(), 'nude-silk');
+    expect(
+      box().getByRole('radio', { name: 'Nude Silk, sold out' }).getAttribute('aria-checked'),
+    ).toBe('true');
+    // The stock note and the disabled button.
+    expect(box().getAllByText('Out of stock')).toHaveLength(2);
+    expect(
+      (box().getByRole('button', { name: 'Out of stock' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(box().queryByRole('button', { name: 'Add to cart' })).toBeNull();
+    expect(input().disabled).toBe(true);
+
+    const save = box().getByRole('button', { name: 'Save to wishlist' });
+    fireEvent.click(save);
+    expect(save.getAttribute('aria-pressed')).toBe('true');
+    expect(window.localStorage.getItem(WISHLIST_STORAGE_KEY)).toContain('prd-1');
+  });
+
+  it('says "Only n left" at low stock and caps the quantity at the stock', async () => {
+    const product = lipstick();
+    product.variants[0] = { ...product.variants[0]!, stock: 3 };
+    await renderBuyBox(product);
+    expect(box().getByText('Only 3 left')).toBeTruthy();
+    for (let i = 0; i < 5; i += 1) {
+      fireEvent.click(box().getByRole('button', { name: 'Increase quantity' }));
+    }
+    expect(input().value).toBe('3');
+  });
+
+  it('lowers the quantity when the next shade has less stock', async () => {
+    const product = lipstick();
+    product.variants[1] = { ...product.variants[1]!, stock: 2 };
+    await renderBuyBox(product);
+    fireEvent.change(input(), { target: { value: '6' } });
+    fireEvent.blur(input());
+    expect(input().value).toBe('6');
+    fireEvent.click(box().getByRole('radio', { name: 'Rose Petal' }));
+    expect(input().value).toBe('2');
+  });
+
+  it('offers size pills when the variants differ by size, without touching the URL', async () => {
+    window.history.replaceState(null, '', '/product/damask-rose-eau-de-parfum');
+    await renderBuyBox(perfume());
+    expect(box().queryByRole('radiogroup', { name: 'Shade' })).toBeNull();
+    const sizes = box().getByRole('group', { name: /Size/ });
+    expect(sizes.querySelector('legend')?.textContent).toBe('Size: 50 ml');
+    fireEvent.click(within(sizes).getByRole('radio', { name: '100 ml' }));
+    expect(sizes.querySelector('legend')?.textContent).toBe('Size: 100 ml');
+    expect(box().getByText(/14,000/)).toBeTruthy();
+    expect(window.location.search).toBe('');
+
+    fireEvent.click(box().getByRole('button', { name: 'Add to cart' }));
+    expect(storedCart()[0]).toMatchObject({
+      variantId: 'damask-100',
+      title: 'Damask Rose Eau de Parfum, 100 ml',
+      unitPrice: 1400000,
+    });
+  });
+
+  it('marks a sold-out size and keeps it selectable', async () => {
+    const product = perfume();
+    product.variants[1] = { ...product.variants[1]!, stock: 0 };
+    await renderBuyBox(product);
+    fireEvent.click(box().getByRole('radio', { name: '100 ml, sold out' }));
+    expect(
+      (box().getByRole('button', { name: 'Out of stock' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it('has no picker for a single variant and adds it under the product title', async () => {
+    await renderBuyBox(lipOil());
+    expect(box().queryByRole('radio')).toBeNull();
+    fireEvent.click(box().getByRole('button', { name: 'Add to cart' }));
+    expect(storedCart()[0]).toMatchObject({ variantId: 'silk-lip-oil-v1', title: 'Silk Lip Oil' });
+    expect(within(toast()).getByText('Silk Lip Oil')).toBeTruthy();
+  });
+
+  it('toggles the wishlist heart', async () => {
+    await renderBuyBox();
+    const heart = box().getByRole('button', { name: 'Save Velvet Matte Lipstick to wishlist' });
+    expect(heart.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(heart);
+    expect(heart.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(heart);
+    expect(heart.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('StickyBuyBar', () => {
+  it('watches the buy box button and shows only once it has scrolled away above', async () => {
+    await renderBuyBox();
+    const add = box().getByRole('button', { name: 'Add to cart' });
+    expect(observers.at(-1)?.targets).toEqual([add]);
+
+    expect(bar().hasAttribute('inert')).toBe(true);
+    mainButtonIs('below');
+    expect(bar().hasAttribute('inert')).toBe(true);
+    mainButtonIs('above');
+    expect(bar().hasAttribute('inert')).toBe(false);
+    expect(bar().className).toContain('translate-y-0');
+    mainButtonIs('visible');
+    expect(bar().hasAttribute('inert')).toBe(true);
+    expect(bar().className).toContain('translate-y-full');
+  });
+
+  it('shows the shade and price and adds from its own button', async () => {
+    await renderBuyBox();
+    mainButtonIs('above');
+    const inBar = within(bar());
+    expect(inBar.getByText('Berry Kiss')).toBeTruthy();
+    expect(inBar.getByText(/1,850/)).toBeTruthy();
+    const add = inBar.getByRole('button', { name: 'Add to cart' });
+    fireEvent.click(add);
+    expect(screen.getByRole('link', { name: 'Cart, 1 item' })).toBeTruthy();
+    expect(fly).toHaveBeenCalledWith(expect.objectContaining({ from: [null, add] }));
+  });
+
+  it('follows a sold-out shade and watches the new buy box button', async () => {
+    await renderBuyBox();
+    fireEvent.click(box().getByRole('radio', { name: 'Nude Silk, sold out' }));
+    const out = box().getByRole('button', { name: 'Out of stock' });
+    expect(observers.filter((o) => o.targets.length > 0).at(-1)?.targets).toEqual([out]);
+    mainButtonIs('above');
+    const inBar = within(bar());
+    expect(inBar.getByText('Nude Silk')).toBeTruthy();
+    expect(
+      (inBar.getByRole('button', { name: 'Out of stock' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+});
