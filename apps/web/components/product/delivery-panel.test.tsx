@@ -183,6 +183,25 @@ describe('DeliveryPanel', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
+  it('keeps focus in the panel when Try again goes away', async () => {
+    const retry = deferred();
+    const getEstimate = vi
+      .fn<GetEstimate>()
+      .mockResolvedValueOnce({ ok: false })
+      .mockReturnValueOnce(retry.promise);
+    await renderPanel(getEstimate);
+    choose('Quetta');
+    await flush();
+    const button = screen.getByRole('button', { name: 'Try again' });
+    button.focus();
+    fireEvent.click(button);
+    expect(document.activeElement).toBe(select());
+    await act(async () => retry.settle({ ok: true, estimate: estimate('Quetta') }));
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(document.activeElement).toBe(select());
+    expect(status().textContent).toMatch(/^2–4 days/);
+  });
+
   it('ignores an answer for a city the shopper has already changed', async () => {
     const lahore = deferred();
     const getEstimate = vi

@@ -2,7 +2,7 @@
 
 import type { PkCity } from '@hb/types';
 import { ChevronDown, Truck } from 'lucide-react';
-import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { setCity, useCity } from '@/lib/city-store';
 import {
   CITY_GROUPS,
@@ -41,11 +41,12 @@ function useHydrated(): boolean {
  * "Delivery to [city ▾]" under Add to cart (docs/p5-catalog.md §5 "Delivery estimate"): a native
  * select of the listed cities by province, remembered in `hb_city_v1`, and the estimate for the
  * chosen city from a server action. The result line is a polite live region with room reserved
- * for two lines, so answers neither jump the layout nor go unannounced. A failure says so and
- * offers a retry; the rest of the page is unaffected.
+ * for the longest answer, so answers neither jump the layout nor go unannounced. A failure says
+ * so and offers a retry; the rest of the page is unaffected.
  */
 export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) {
   const id = useId();
+  const selectRef = useRef<HTMLSelectElement>(null);
   const hydrated = useHydrated();
   const city = useCity();
   // Bumped by every choice and retry, so each one is a new request even for the same city.
@@ -91,7 +92,7 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
   } else if (shown) line = 'We couldn’t get an estimate right now.';
 
   return (
-    <div className="rounded-card border border-ink-200 bg-white p-4">
+    <div className="@container rounded-card border border-ink-200 bg-white p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Truck aria-hidden className="h-6 w-6 shrink-0 text-gold-600" strokeWidth={1.5} />
         <label htmlFor={id} className="text-sm font-medium text-ink-900">
@@ -99,6 +100,7 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
         </label>
         <div className="relative min-w-0 flex-1 sm:max-w-60">
           <select
+            ref={selectRef}
             id={id}
             value={city ?? ''}
             onChange={(e) => {
@@ -126,14 +128,21 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
           />
         </div>
       </div>
-      <div className="mt-3 flex min-h-10 flex-wrap items-start gap-x-3">
+      {/* Room for the longest answer (a fee confirmed at checkout): three lines on a panel under
+          20.5rem (a 360 px phone), two from there; in rem, so it holds at any text size. */}
+      <div className="mt-3 flex min-h-15 flex-wrap items-start gap-x-3 @min-[20.5rem]:min-h-10">
         <p id={`${id}-result`} role="status" className="text-sm leading-5 text-ink-500">
           {line}
         </p>
         {shown !== null && typeof shown === 'object' && !shown.ok ? (
           <button
             type="button"
-            onClick={() => setAttempt((n) => n + 1)}
+            onClick={() => {
+              // The button goes once the retry is under way: focus stays in the panel, on the
+              // city, which the select's description (the result line) then follows.
+              selectRef.current?.focus();
+              setAttempt((n) => n + 1);
+            }}
             className="-my-3 min-h-11 text-sm font-medium text-pink-700 underline underline-offset-4 hover:text-pink-600"
           >
             Try again
