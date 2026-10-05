@@ -46,8 +46,10 @@ export function StoreHeader({ store, total, filtered, className }: StoreHeaderPr
           className="object-cover"
         />
       </div>
-      <div className="-mt-10 flex flex-col gap-4 px-2 sm:-mt-14 sm:flex-row sm:items-end sm:gap-6 sm:px-6">
-        <span className="relative h-20 w-20 shrink-0 overflow-hidden rounded-pill border-2 border-gold-500 bg-white shadow-lift sm:h-28 sm:w-28">
+      {/* Only the logo is pulled up over the banner (it paints above it); the name starts below
+          the banner's edge, so a long, wrapping name is never drawn under the image. */}
+      <div className="flex flex-col gap-4 px-2 sm:flex-row sm:items-start sm:gap-6 sm:px-6">
+        <span className="relative -mt-10 h-20 w-20 shrink-0 overflow-hidden rounded-pill border-2 border-gold-500 bg-white shadow-lift sm:-mt-14 sm:h-28 sm:w-28">
           <Image
             src={store.logo.url}
             alt={store.logo.alt}
@@ -56,7 +58,7 @@ export function StoreHeader({ store, total, filtered, className }: StoreHeaderPr
             className="object-cover"
           />
         </span>
-        <div className="flex min-w-0 flex-col gap-2 sm:pb-1">
+        <div className="flex min-w-0 flex-col gap-2 sm:pt-4">
           <p className="eyebrow text-gold-800">Store</p>
           <h1 className="font-display text-[34px] font-semibold leading-tight text-balance text-ink-900 md:text-[48px]">
             {store.storeName}

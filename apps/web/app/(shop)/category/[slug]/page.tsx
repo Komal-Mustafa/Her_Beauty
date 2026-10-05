@@ -7,7 +7,8 @@ import { CategoryBannerAd } from '@/components/listing/category-banner-ad';
 import { ListingHeader } from '@/components/listing/listing-header';
 import { ListingLayout } from '@/components/listing/listing-layout';
 import { listingMetadata } from '@/components/listing/listing-metadata';
-import { parseListingParams, toSearchQuery } from '@/lib/listing-params';
+import { listingSearch } from '@/components/listing/load-listing';
+import { parseListingParams } from '@/lib/listing-params';
 import { optional } from '@/lib/optional';
 import { breadcrumbJsonLd, type Crumb } from '@/lib/seo/json-ld';
 import { JsonLd } from '@/lib/seo/json-ld-script';
@@ -22,12 +23,18 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const category = await loadCategory(slug);
   if (!category) return { title: 'Category not found' };
+  const listing = parseListingParams('category', query);
+  // The same search as the page (cached per request): its page count settles whether this URL is
+  // a page of results at all (§2.3).
+  const { pageCount } = await listingSearch('category', listing, { category: category.slug });
   return listingMetadata({
     kind: 'category',
     path: `/category/${category.slug}`,
     title: category.name,
     description: `Shop ${category.name.toLowerCase()} from verified sellers and official brands in Pakistan, with payment protected until delivery.`,
-    params: parseListingParams('category', query),
+    params: listing,
+    raw: query,
+    pageCount,
   });
 }
 
@@ -44,7 +51,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   const path = `/category/${category.slug}`;
   const listing = parseListingParams('category', query);
   const [result, [ad]] = await Promise.all([
-    api.search(toSearchQuery('category', listing, { category: category.slug })),
+    listingSearch('category', listing, { category: category.slug }),
     optional('category banner', api.getAdSlots('category_banner', { category: category.slug }), []),
   ]);
   const crumbs: Crumb[] = [

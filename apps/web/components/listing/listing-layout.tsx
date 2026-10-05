@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { hasFilters, listingHref, type ListingKind, type ListingParams } from '@/lib/listing-url';
 import { ClearFiltersButton } from './active-filters';
 import { FilterPanel } from './filter-panel';
+import { FILTERS_HEADING_ID } from './ids';
 import { ListingProvider } from './listing-context';
 import { ListingGrid } from './listing-grid';
 import { ListingResults } from './listing-results';
@@ -40,13 +41,17 @@ export function ListingLayout({ kind, path, params, result, header, empty }: Lis
       {header}
       <div className="mt-8 md:mt-10 md:grid md:grid-cols-[264px_minmax(0,1fr)] md:items-start md:gap-8 lg:gap-10">
         <aside
-          aria-labelledby="filters-title"
-          // Scrolls on its own when taller than the window; wheel scrolling there skips Lenis.
+          aria-labelledby={FILTERS_HEADING_ID}
+          // Scrolls on its own when taller than the window; wheel scrolling there skips Lenis. That
+          // scroll box clips, so a little inline padding (offset by the margin) keeps the focus
+          // rings of full-width buttons whole.
           data-lenis-prevent
-          className="hidden overscroll-contain md:sticky md:top-24 md:block md:max-h-[calc(100dvh-7rem)] md:overflow-y-auto md:pr-2"
+          className="hidden overscroll-contain md:sticky md:top-24 md:-ml-1.5 md:block md:max-h-[calc(100dvh-7rem)] md:overflow-y-auto md:pl-1.5 md:pr-2"
         >
+          {/* Focusable from script only: it takes focus when a drawer closes on widening. */}
           <h2
-            id="filters-title"
+            id={FILTERS_HEADING_ID}
+            tabIndex={-1}
             className="mb-1 font-sans text-[15px] font-semibold uppercase tracking-[0.14em] text-gold-800"
           >
             Filters

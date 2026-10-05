@@ -80,6 +80,16 @@ describe('Pagination', () => {
     expect(next.hasAttribute('href')).toBe(false);
   });
 
+  it('marks no page as current past the last one', () => {
+    // An old link to ?page=5 of a two-page listing: every page is a link, none is "current".
+    render(<Pagination path="/new" params={params({ page: 5 })} pageCount={2} />);
+    expect(nav().querySelector('[aria-current="page"]')).toBeNull();
+    expect(within(nav()).getByRole('link', { name: 'Page 2' }).getAttribute('href')).toBe(
+      '/new?page=2',
+    );
+    expect(within(nav()).getByRole('link', { name: 'Next' }).hasAttribute('href')).toBe(false);
+  });
+
   it('marks gaps with an ellipsis hidden from screen readers', () => {
     render(<Pagination path="/search" params={params({ q: 'lip', page: 6 })} pageCount={12} />);
     const items = within(nav()).getAllByRole('listitem', { hidden: true });

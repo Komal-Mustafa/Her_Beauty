@@ -15,8 +15,7 @@ type FilterLinkProps = {
 
 /**
  * A link to the same listing with other filters. A plain click applies them in place, like the
- * filter panel (transition, fade, live count); other clicks (new tab…) and no JavaScript follow
- * the real URL.
+ * filter panel (transition, fade, live count); other clicks (new tab…) follow the real URL.
  */
 export function FilterLink({ to, className, children }: FilterLinkProps) {
   const { path, apply } = useListing();

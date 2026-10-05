@@ -47,11 +47,14 @@ const cell =
 const link = `${cell} text-ink-900 transition-colors duration-fast hover:bg-blush-50 hover:text-pink-700`;
 
 /**
- * Numbered pages (docs/p5-catalog.md §2.1): plain links, so pages work without JavaScript, can be
- * shared and are crawlable. Previous and Next are not links on the first and last page.
+ * Numbered pages (docs/p5-catalog.md §2.1): plain links, so every page has its own URL to share,
+ * open in a new tab or crawl. Previous and Next are not links on the first and last page.
  */
 export function Pagination({ path, params, pageCount, className }: PaginationProps) {
   if (pageCount <= 1) return null;
+  // A page past the last one (an old link) shows the pages around the last; none of them is the
+  // page the shopper is on, so nothing is marked `aria-current`.
+  const beyondLast = params.page > pageCount;
   const current = Math.min(params.page, pageCount);
   const href = (page: number) => listingHref(path, { ...params, page });
 
@@ -97,7 +100,7 @@ export function Pagination({ path, params, pageCount, className }: PaginationPro
             </li>
           ) : (
             <li key={item}>
-              {item === current ? (
+              {item === current && !beyondLast ? (
                 <span
                   aria-current="page"
                   className={cn(cell, 'bg-pink-600 text-white shadow-soft')}

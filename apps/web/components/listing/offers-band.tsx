@@ -5,7 +5,8 @@ import { productCount } from '@/lib/listing-url';
 /**
  * The offers page's intro band (docs/p5-catalog.md §1): a rose-gradient house promotion with the
  * page's H1, not an ad, so no Sponsored label. Same treatment as the home offer banner: a darker
- * wash keeps white text at 4.5:1 across the gradient, and gold rings are the only decoration.
+ * wash keeps white text at 4.5:1 across the gradient, and gold rings are the only decoration. All
+ * text is white: pink-100 falls under 4.5:1 on the lighter left of the gradient.
  */
 export function OffersBand({ total, className }: { total: number; className?: string }) {
   return (
@@ -27,7 +28,7 @@ export function OffersBand({ total, className }: { total: number; className?: st
         aria-hidden
         className="pointer-events-none absolute -bottom-24 right-24 -z-10 h-48 w-48 rounded-pill border border-gold-300/30"
       />
-      <p className="eyebrow mb-3 text-pink-100">This week</p>
+      <p className="eyebrow mb-3 text-white">This week</p>
       <h1 className="font-display text-[34px] font-semibold leading-tight md:text-[56px]">
         Offers
       </h1>
@@ -38,7 +39,7 @@ export function OffersBand({ total, className }: { total: number; className?: st
           payment is held safely until your parcel arrives.
         </span>
       </p>
-      <p className="mt-4 text-sm tabular-nums text-pink-100">{productCount(total)} on sale</p>
+      <p className="mt-4 text-sm tabular-nums text-white">{productCount(total)} on sale</p>
     </header>
   );
 }

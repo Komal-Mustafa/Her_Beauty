@@ -5,6 +5,7 @@ import {
   cleared,
   EMPTY_LISTING,
   hasFilterOrSort,
+  hasSortParam,
   listingHref,
   listingSearchParams,
   paisaToRupees,
@@ -204,6 +205,19 @@ describe('listing URLs', () => {
     expect(hasFilterOrSort(params({ sort: 'newest' }))).toBe(true);
     expect(hasFilterOrSort(params({ sale: true }))).toBe(true);
     expect(hasFilterOrSort(params({ q: 'serum' }))).toBe(true);
+  });
+
+  it('sees a sort param even when it is the page default (dropped when parsed)', () => {
+    // `sort=best_selling` on a category page changes nothing, so it is not in the params…
+    expect(parseListingParams('category', sp('sort=best_selling')).sort).toBeUndefined();
+    // …but the URL still carries it, and such a page is not indexed (§2.3).
+    expect(hasSortParam(sp('sort=best_selling'))).toBe(true);
+    expect(hasSortParam(sp('sort=price_asc'))).toBe(true);
+    expect(hasSortParam({ sort: 'nonsense' })).toBe(true);
+    expect(hasSortParam({ sort: ['', 'newest'] })).toBe(true);
+    expect(hasSortParam(sp('page=2'))).toBe(false);
+    expect(hasSortParam(sp('sort='))).toBe(false);
+    expect(hasSortParam({})).toBe(false);
   });
 
   it('offers Relevance only on a search with text', () => {

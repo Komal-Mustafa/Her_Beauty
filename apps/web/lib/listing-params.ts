@@ -79,6 +79,15 @@ function searchText(raw: RawParams): string | undefined {
   return undefined;
 }
 
+/**
+ * The URL carries a `sort` value, even the page's own default order (which `parseListingParams`
+ * drops, since it changes nothing). Every re-sorted page stays out of the index (§2.3), so the
+ * metadata asks the raw URL rather than the parsed params.
+ */
+export function hasSortParam(raw: RawParams): boolean {
+  return values(raw, 'sort').some((value) => value !== '');
+}
+
 /** The listing state of a page from its URL; anything invalid or not offered there is dropped. */
 export function parseListingParams(kind: ListingKind, raw: RawParams): ListingParams {
   const offers = (filter: ListingFilter) => LISTING_FILTERS[kind].includes(filter);

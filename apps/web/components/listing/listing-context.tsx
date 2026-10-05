@@ -27,6 +27,8 @@ type ListingState = {
   total: number;
   /** A filter or sort change is loading. */
   pending: boolean;
+  /** The result count to read out after a change ("6 products"), or empty. */
+  announcement: string;
   /** Applies new filters at once: a history entry, no scroll jump. */
   apply: (next: ListingParams) => void;
 };
@@ -52,7 +54,8 @@ type ListingProviderProps = {
  * Filter state of a listing page (docs/p5-catalog.md §2.1 "Filters apply at once"). A change
  * pushes the new URL in a transition: the controls show the new values straight away
  * (`useOptimistic`), the results fade while the server renders them, and a polite live region
- * then reads out the new count. The URL stays the source of truth, so Back restores the filters.
+ * then reads out the new count. The URL stays the source of truth, so Back restores the filters
+ * (and the count is read out again, never left at the one before).
  */
 export function ListingProvider({
   kind,
@@ -67,6 +70,9 @@ export function ListingProvider({
   const [optimistic, setOptimistic] = useOptimistic(params);
   const [announcement, setAnnouncement] = useState('');
   const changed = useRef(false);
+  // The filters and sort the count was last read out for (the page number does not change it).
+  const shownKey = listingHref(path, { ...params, page: 1 });
+  const announcedKey = useRef(shownKey);
 
   const apply = useCallback(
     (next: ListingParams) => {
@@ -81,23 +87,49 @@ export function ListingProvider({
     [path, router, setOptimistic],
   );
 
+  // Back and Forward change the filters without `apply`: the old count goes at once, the new one
+  // is read out when its results show (below).
   useEffect(() => {
-    if (pending || !changed.current) return;
+    const onHistory = () => setAnnouncement('');
+    window.addEventListener('popstate', onHistory);
+    return () => window.removeEventListener('popstate', onHistory);
+  }, []);
+
+  useEffect(() => {
+    if (pending) return;
+    if (!changed.current && announcedKey.current === shownKey) return;
     changed.current = false;
+    announcedKey.current = shownKey;
     setAnnouncement(productCount(total));
-  }, [pending, total]);
+  }, [pending, shownKey, total]);
 
   const value = useMemo(
-    () => ({ kind, path, params: optimistic, facets, total, pending, apply }),
-    [kind, path, optimistic, facets, total, pending, apply],
+    () => ({ kind, path, params: optimistic, facets, total, pending, announcement, apply }),
+    [kind, path, optimistic, facets, total, pending, announcement, apply],
   );
 
   return (
     <ListingContext.Provider value={value}>
       {children}
-      <p role="status" className="sr-only">
-        {announcement}
-      </p>
+      <ListingStatus />
     </ListingContext.Provider>
+  );
+}
+
+/**
+ * The polite live region with the result count. The page has one; the filter drawer adds its own
+ * while open, because a modal dialog hides the rest of the page from assistive tech, this region
+ * included. `fresh` regions (the drawer's) start empty and only read out counts that arrive after
+ * they appear, never an older one.
+ */
+export function ListingStatus({ fresh = false }: { fresh?: boolean }) {
+  const { announcement } = useListing();
+  const [first] = useState(announcement);
+  const [live, setLive] = useState(!fresh);
+  if (!live && announcement !== first) setLive(true);
+  return (
+    <p role="status" className="sr-only">
+      {live ? announcement : ''}
+    </p>
   );
 }

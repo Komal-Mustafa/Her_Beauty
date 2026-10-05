@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FilterDrawer } from './filter-drawer';
+import { FILTERS_HEADING_ID } from './ids';
 import { params, renderListing } from './test-listing';
 
 const push = vi.hoisted(() => vi.fn());
@@ -24,6 +25,18 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
+
+/** The sidebar heading beside the drawer, as the listing layout renders it from 1024 px. */
+function Drawer() {
+  return (
+    <>
+      <h2 id={FILTERS_HEADING_ID} tabIndex={-1}>
+        Filters
+      </h2>
+      <FilterDrawer />
+    </>
+  );
+}
 
 /** The Filters button as a shopper reaches it: focused, then pressed. */
 async function open() {
@@ -67,13 +80,27 @@ describe('FilterDrawer', () => {
     expect(document.activeElement).toBe(button);
   });
 
-  it('closes itself when the window grows to the sidebar layout', async () => {
-    renderListing(<FilterDrawer />);
+  it('reads the result count out inside the dialog', async () => {
+    // Open, the dialog hides the page's own live region from assistive tech: it has one of its own.
+    renderListing(<FilterDrawer />, { total: 6 });
+    const { dialog } = await open();
+    const status = within(dialog).getByRole('status');
+    expect(status.textContent).toBe('');
+    await act(async () =>
+      fireEvent.click(screen.getByRole('checkbox', { name: /^Glow, 4 products$/ })),
+    );
+    expect(status.textContent).toBe('6 products');
+  });
+
+  it('closes itself when the window grows to the sidebar layout, and focuses the sidebar', async () => {
+    renderListing(<Drawer />);
     await open();
     await act(async () => {
       media.matches = true;
       for (const fn of media.listeners) fn();
     });
     expect(screen.queryByRole('dialog')).toBeNull();
+    // The Filters button is hidden at that width, so focus goes to the sidebar's heading.
+    expect(document.activeElement).toBe(document.getElementById(FILTERS_HEADING_ID));
   });
 });

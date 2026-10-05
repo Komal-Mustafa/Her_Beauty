@@ -1,18 +1,54 @@
+'use client';
+
 import type { ProductCard } from '@hb/types';
 import { Reveal } from '@hb/ui';
+import { useEffect, useState } from 'react';
 import { ShopProductCard } from '@/components/product/shop-product-card';
 
 /** Cards with `priority` images: the first row on a wide screen, the LCP candidates. */
 const PRIORITY = 4;
-/** Columns at the widest grid; the rise-in stagger restarts every row. */
-const COLUMNS = 4;
+
+/** Columns per width (docs/p5-catalog.md §2.1): 2, then 3 from 768 px and 4 from 1280 px. */
+const WIDE_COLUMNS = [
+  { query: '(min-width: 80rem)', columns: 4 },
+  { query: '(min-width: 48rem)', columns: 3 },
+] as const;
+const NARROW_COLUMNS = 2;
+
+function gridColumns(): number {
+  if (typeof window === 'undefined') return WIDE_COLUMNS[0].columns;
+  for (const { query, columns } of WIDE_COLUMNS) {
+    if (window.matchMedia(query).matches) return columns;
+  }
+  return NARROW_COLUMNS;
+}
+
+/**
+ * The columns the grid has right now, so the rise-in stagger runs along a row and starts again on
+ * the next one (§8 "stagger by column"). Only the animation delay depends on it, never the markup,
+ * so it is read from the window while hydrating and followed as the window is resized.
+ */
+function useGridColumns(): number {
+  const [columns, setColumns] = useState(gridColumns);
+  useEffect(() => {
+    const update = () => setColumns(gridColumns());
+    update();
+    const queries = WIDE_COLUMNS.map(({ query }) => window.matchMedia(query));
+    for (const query of queries) query.addEventListener('change', update);
+    return () => {
+      for (const query of queries) query.removeEventListener('change', update);
+    };
+  }, []);
+  return columns;
+}
 
 /**
  * The product grid of a listing page (docs/p5-catalog.md §2.1): 2 columns, 3 from 768 px, 4 from
- * 1280 px (beside the filters from 1024 px). Cards rise in with `Reveal`, staggered across a row
+ * 1280 px (beside the filters from 1024 px). Cards rise in with `Reveal`, staggered by column
  * (§8); the first row is the LCP, so it is drawn at once with priority images instead.
  */
 export function ListingGrid({ products }: { products: readonly ProductCard[] }) {
+  const columns = useGridColumns();
   return (
     <ul className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 sm:gap-x-6 lg:grid-cols-4">
       {products.map((p, i) => {
@@ -30,7 +66,7 @@ export function ListingGrid({ products }: { products: readonly ProductCard[] }) 
             {card}
           </li>
         ) : (
-          <Reveal as="li" key={p.id} index={i % COLUMNS} className="flex">
+          <Reveal as="li" key={p.id} index={i % columns} className="flex">
             {card}
           </Reveal>
         );

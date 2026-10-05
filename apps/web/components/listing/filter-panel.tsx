@@ -6,7 +6,6 @@ import { Fragment, useId, useState, type FormEvent, type ReactNode } from 'react
 import {
   LISTING_FILTERS,
   LISTING_RUPEES_MAX,
-  listingSearchParams,
   paisaToRupees,
   productCount,
   toggled,
@@ -35,15 +34,12 @@ type FilterPanelProps = {
 /**
  * The filter groups of a listing page (docs/p5-catalog.md §2.1): only the groups the page offers
  * and that have options; options without products are hidden unless ticked. Every change applies
- * at once. The panel is also a plain GET form, so without JavaScript "Apply filters" submits it.
+ * at once, so nothing is ever submitted: the form is there to keep the sidebar's and the drawer's
+ * radio groups apart (radios group by name within their form).
  */
 export function FilterPanel({ idPrefix, className }: FilterPanelProps) {
-  const { kind, path, params, facets, apply } = useListing();
+  const { kind, params, facets, apply } = useListing();
   const set = (change: Partial<ListingParams>) => apply(withChange(params, change));
-
-  // The search text and the sort ride along when the form is submitted without JavaScript.
-  const keep = listingSearchParams({ ...params, page: 1 });
-  const hidden = [...keep.entries()].filter(([key]) => key === 'q' || key === 'sort');
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -157,26 +153,10 @@ export function FilterPanel({ idPrefix, className }: FilterPanelProps) {
   };
 
   return (
-    <form
-      action={path}
-      method="get"
-      noValidate
-      onSubmit={onSubmit}
-      className={cn('flex flex-col', className)}
-    >
-      {hidden.map(([key, value]) => (
-        <input key={key} type="hidden" name={key} value={value} />
-      ))}
+    <form noValidate onSubmit={onSubmit} className={cn('flex flex-col', className)}>
       {LISTING_FILTERS[kind].map((filter) => (
         <Fragment key={filter}>{groups[filter]()}</Fragment>
       ))}
-      <noscript>
-        <div className="py-4">
-          <Button type="submit" block>
-            Apply filters
-          </Button>
-        </div>
-      </noscript>
     </form>
   );
 }
@@ -205,7 +185,10 @@ function PriceFilter({ idPrefix, params, range, onApply }: PriceFilterProps) {
   const text = (rupees: number | undefined) => (rupees === undefined ? '' : String(rupees));
   const [min, setMin] = useState(text(params.min));
   const [max, setMax] = useState(text(params.max));
-  const [error, setError] = useState(false);
+  // Failed tries in a row (0 = no error). Each one renders a new alert, so pressing Apply again
+  // with the same mistake is read out again.
+  const [failures, setFailures] = useState(0);
+  const error = failures > 0;
   // A new URL (Apply, a chip removed, Back) puts its prices back in the inputs. Adjusted while
   // rendering instead of remounting, so focus stays on the Apply button.
   const [shown, setShown] = useState({ min: params.min, max: params.max });
@@ -213,7 +196,7 @@ function PriceFilter({ idPrefix, params, range, onApply }: PriceFilterProps) {
     setShown({ min: params.min, max: params.max });
     setMin(text(params.min));
     setMax(text(params.max));
-    setError(false);
+    setFailures(0);
   }
   const ids = { min: `${idPrefix}-min`, max: `${idPrefix}-max`, error: useId() };
 
@@ -221,10 +204,10 @@ function PriceFilter({ idPrefix, params, range, onApply }: PriceFilterProps) {
     const low = typedRupees(min);
     const high = typedRupees(max);
     if (low === null || high === null) {
-      setError(true);
+      setFailures((n) => n + 1);
       return;
     }
-    setError(false);
+    setFailures(0);
     const swap = low !== undefined && high !== undefined && low > high;
     onApply(swap ? high : low, swap ? low : high);
   }
@@ -271,8 +254,9 @@ function PriceFilter({ idPrefix, params, range, onApply }: PriceFilterProps) {
         </span>
         {field('max', 'Max (Rs)', max, setMax)}
       </div>
+      {/* An alert, so it is heard while focus stays on Apply (WCAG 4.1.3). */}
       {error ? (
-        <p id={ids.error} className="text-sm text-danger">
+        <p key={failures} id={ids.error} role="alert" className="text-sm text-danger">
           Enter whole rupees, like 1500.
         </p>
       ) : null}

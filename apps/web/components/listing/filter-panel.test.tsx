@@ -88,14 +88,21 @@ describe('FilterPanel', () => {
     expect(pushed()).toBe('/category/lips?min=1000&max=2500');
   });
 
-  it('refuses a price that is not whole rupees', () => {
+  it('refuses a price that is not whole rupees and says so out loud', () => {
     renderListing(<FilterPanel idPrefix="t" />);
     const min = screen.getByLabelText('Min (Rs)');
     fireEvent.change(min, { target: { value: '12.50' } });
     fireEvent.keyDown(min, { key: 'Enter' });
     expect(push).not.toHaveBeenCalled();
     expect(min.getAttribute('aria-invalid')).toBe('true');
-    expect(screen.getByText('Enter whole rupees, like 1500.')).toBeTruthy();
+    // An alert, because focus stays on the Apply button (WCAG 4.1.3).
+    const error = screen.getByRole('alert');
+    expect(error.textContent).toBe('Enter whole rupees, like 1500.');
+    expect(min.getAttribute('aria-describedby')).toBe(error.id);
+
+    // Pressing Apply again with the same mistake renders a new alert, so it is read out again.
+    fireEvent.click(screen.getByRole('button', { name: 'Apply price' }));
+    expect(screen.getByRole('alert')).not.toBe(error);
   });
 
   it('hides options without products unless ticked, and groups without options', () => {

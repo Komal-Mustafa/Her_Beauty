@@ -5,12 +5,12 @@ import type { Metadata } from 'next';
 import { ListingHeader } from '@/components/listing/listing-header';
 import { ListingLayout } from '@/components/listing/listing-layout';
 import { listingMetadata } from '@/components/listing/listing-metadata';
+import { listingSearch } from '@/components/listing/load-listing';
 import { SearchNoResults, SearchStart } from '@/components/listing/search-states';
 import {
   hasFilterOrSort,
   hasFilters,
   parseListingParams,
-  toSearchQuery,
   type ListingParams,
 } from '@/lib/listing-params';
 import { optional } from '@/lib/optional';
@@ -69,7 +69,7 @@ export default async function SearchPage({ searchParams }: PageProps) {
     );
   }
 
-  const result = await getApi().search(toSearchQuery('search', listing));
+  const result = await listingSearch('search', listing);
   const title = heading(listing);
 
   if (listing.q && result.total === 0 && !hasFilters(listing)) {

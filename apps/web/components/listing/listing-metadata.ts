@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { hasSortParam, type RawParams } from '@/lib/listing-params';
 import { hasFilterOrSort, type ListingKind, type ListingParams } from '@/lib/listing-url';
 import { SITE } from '@/lib/site';
 
@@ -11,12 +12,17 @@ type ListingMetadataInput = {
   /** One line about the page. */
   description: string;
   params?: ListingParams;
+  /** The URL's own params: an explicit `sort` counts even when it is the page's default order. */
+  raw?: RawParams;
+  /** Pages of results, so a page past the last one is not offered as a search result. */
+  pageCount?: number;
 };
 
 /**
  * Listing SEO (docs/p5-catalog.md §2.3): title "{H1} | Her Beauty", a one-line description, the
  * canonical path plus `?page=n` from page 2. A filtered or re-sorted page, and every search page,
- * is `noindex, follow`: its products stay reachable, the page itself is not a search result.
+ * is `noindex, follow`: its products stay reachable, the page itself is not a search result. A
+ * page past the last one (an old link) is `noindex, follow` too: it holds no products.
  */
 export function listingMetadata({
   kind,
@@ -24,11 +30,18 @@ export function listingMetadata({
   title,
   description,
   params,
+  raw,
+  pageCount,
 }: ListingMetadataInput): Metadata {
   const page = params?.page ?? 1;
   const canonical = page > 1 ? `${path}?page=${page}` : path;
   const fullTitle = `${title} | ${SITE.name}`;
-  const noindex = kind === 'search' || (params !== undefined && hasFilterOrSort(params));
+  const beyondLast = pageCount !== undefined && page > Math.max(pageCount, 1);
+  const noindex =
+    kind === 'search' ||
+    beyondLast ||
+    (params !== undefined && hasFilterOrSort(params)) ||
+    (raw !== undefined && hasSortParam(raw));
   return {
     title: { absolute: fullTitle },
     description,

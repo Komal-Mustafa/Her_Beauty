@@ -6,7 +6,8 @@ import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { BrandHeader } from '@/components/listing/brand-header';
 import { ListingLayout } from '@/components/listing/listing-layout';
 import { listingMetadata } from '@/components/listing/listing-metadata';
-import { parseListingParams, toSearchQuery } from '@/lib/listing-params';
+import { listingSearch } from '@/components/listing/load-listing';
+import { parseListingParams } from '@/lib/listing-params';
 import { optional } from '@/lib/optional';
 import { breadcrumbJsonLd, type Crumb } from '@/lib/seo/json-ld';
 import { JsonLd } from '@/lib/seo/json-ld-script';
@@ -21,12 +22,18 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const brand = await loadBrand(slug);
   if (!brand) return { title: 'Brand not found' };
+  const listing = parseListingParams('brand', query);
+  // The same search as the page (cached per request): its page count settles whether this URL is
+  // a page of results at all (§2.3).
+  const { pageCount } = await listingSearch('brand', listing, { brand: [brand.slug] });
   return listingMetadata({
     kind: 'brand',
     path: `/brand/${brand.slug}`,
     title: brand.name,
     description: `Shop ${brand.name}${brand.isProtected ? ', an official brand,' : ''} on Her Beauty: genuine products from verified sellers, with payment protected until delivery.`,
-    params: parseListingParams('brand', query),
+    params: listing,
+    raw: query,
+    pageCount,
   });
 }
 
@@ -44,7 +51,7 @@ export default async function BrandPage({ params, searchParams }: PageProps) {
   const path = `/brand/${brand.slug}`;
   const listing = parseListingParams('brand', query);
   const [result, stores] = await Promise.all([
-    api.search(toSearchQuery('brand', listing, { brand: [brand.slug] })),
+    listingSearch('brand', listing, { brand: [brand.slug] }),
     // Only visible stores are listed, so a hidden or suspended owner gets no link.
     brand.ownerSellerId ? optional('stores', api.getStores(), []) : [],
   ]);
