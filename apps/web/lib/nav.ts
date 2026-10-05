@@ -2,8 +2,10 @@ import type { NavGroup, NavLink } from '@hb/types';
 import { SITE } from './site';
 
 /*
- * Every link here must resolve to a real page by the end of P5 (docs/frontend-plan.md).
- * Routes that land later: /brands, /offers, /new (P5), /account/* (P5), /cart (P6), /advertise (P9).
+ * Every link here must resolve to a real page by the end of P5 (docs/frontend-plan.md). P5a built
+ * the catalogue (/new, /offers, /brands, /category/*, /brand/*, /store/*, /search). Routes that
+ * land later: /account/orders, /account/wishlist, /about, /faq, /contact, /policies/* and
+ * /become-a-seller (P5b), /cart (P6), /advertise (P9).
  */
 export const PRIMARY_NAV: NavLink[] = [
   { label: 'New in', href: '/new' },
