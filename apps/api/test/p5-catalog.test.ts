@@ -226,6 +226,9 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       const red = await search('?q=red%20lipstick&pageSize=48');
       expect(slugs(red.items)).toContain('mehr-liquid-lipstick'); // Chilli: no "red" in the name
       for (const card of red.items) expect(families(card), card.slug).toContain('red');
+      // A family matches only as a whole word: "brow" is not the start of "Brown".
+      expect(slugs((await search('?q=brow&pageSize=48')).items)).toEqual(['lumiere-brow-pomade']);
+      expect((await search('?q=matte%20brow')).total).toBe(0);
     });
 
     it('never returns hidden products, even by their exact title', async () => {
@@ -749,6 +752,9 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       { q: 'brush', pageSize: 48 },
       { q: 'red lipstick' },
       { q: 'blush', category: 'tools' },
+      { q: 'brow' },
+      { q: 'matte brow' },
+      { q: 'nu' },
       { category: 'lips', shade: ['red', 'berry'] },
       { category: 'skincare', skinType: ['oily'], minRating: 4 },
       { brand: ['glow', 'velvet'], sort: 'price_asc' },
@@ -782,6 +788,7 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       { q: 'serum', limit: 100 },
       { category: 'eyes', sort: 'rating', limit: 100 },
       { q: 'red lipstick', limit: 100 },
+      { q: 'brow', limit: 100 },
       // The API loads only the Tools rows: "blush" has no exact match there, so both read it as
       // a typo of "brush" (search judges against every product and finds nothing).
       { q: 'blush', category: 'tools', limit: 100 },

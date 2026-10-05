@@ -80,6 +80,11 @@ export type SearchDoc = {
   category: string;
   tags: readonly string[];
   shades: readonly string[];
+  /**
+   * Families of its shades ("Red", "Nude"), words the shopper never sees on the product: they
+   * match only exactly, so "brow" does not find a brown lipstick by prefix nor "berri" by typo.
+   */
+  shadeFamilies?: readonly string[];
 };
 
 /** How much a match in each field counts. */
@@ -89,20 +94,26 @@ export const SEARCH_FIELD_WEIGHTS = {
   category: 2,
   tags: 2,
   shades: 1,
+  shadeFamilies: 1,
   store: 1,
 } as const satisfies Record<keyof SearchDoc, number>;
+
+/** Fields matched only by an exact word (no prefix, no typos). */
+const EXACT_ONLY_FIELDS: ReadonlySet<keyof SearchDoc> = new Set(['shadeFamilies']);
 
 /** An exact word beats a prefix (type-ahead), which beats a typo. */
 const MATCH_QUALITY = { exact: 3, prefix: 2, typo: 1 } as const;
 
-type IndexedDoc = { weight: number; words: readonly string[] }[];
+type IndexedField = { weight: number; exactOnly: boolean; words: readonly string[] };
+type IndexedDoc = readonly IndexedField[];
 
 function indexDoc(doc: SearchDoc): IndexedDoc {
   const words = (texts: readonly string[]) => [...new Set(texts.flatMap(tokenize))];
   return (Object.keys(SEARCH_FIELD_WEIGHTS) as (keyof SearchDoc)[]).map((field) => {
-    const value = doc[field];
+    const value = doc[field] ?? [];
     return {
       weight: SEARCH_FIELD_WEIGHTS[field],
+      exactOnly: EXACT_ONLY_FIELDS.has(field),
       words: words(typeof value === 'string' ? [value] : value),
     };
   });
@@ -117,20 +128,23 @@ type Term = {
   typos: number;
 };
 
-/** The match of a query word without typos (exact, or by prefix when allowed); 0 = none. */
-function cleanMatch(term: Term, word: string): number {
+/**
+ * The match of a query word with a word of a field without typos (exact, or by prefix when the
+ * term and the field allow it); 0 = none.
+ */
+function cleanMatch(term: Term, field: IndexedField, word: string): number {
   if (term.text === word) return MATCH_QUALITY.exact;
-  return term.prefix && word.startsWith(term.text) ? MATCH_QUALITY.prefix : 0;
+  return term.prefix && !field.exactOnly && word.startsWith(term.text) ? MATCH_QUALITY.prefix : 0;
 }
 
-function wordMatch(term: Term, word: string): number {
-  const clean = cleanMatch(term, word);
-  if (clean > 0 || term.typos === 0) return clean;
+function wordMatch(term: Term, field: IndexedField, word: string): number {
+  const clean = cleanMatch(term, field, word);
+  if (clean > 0 || term.typos === 0 || field.exactOnly) return clean;
   return damerauLevenshtein(term.text, word, term.typos) <= term.typos ? MATCH_QUALITY.typo : 0;
 }
 
 const hasCleanMatch = (term: Term, doc: IndexedDoc) =>
-  doc.some((field) => field.words.some((word) => cleanMatch(term, word) > 0));
+  doc.some((field) => field.words.some((word) => cleanMatch(term, field, word) > 0));
 
 /**
  * The query's words. A word may match with typos only when none of the `scanned` products has it
@@ -154,7 +168,7 @@ function scoreTerms(terms: readonly Term[], doc: IndexedDoc): number {
     let best = 0;
     for (const field of doc) {
       for (const word of field.words) {
-        best = Math.max(best, wordMatch(term, word) * field.weight);
+        best = Math.max(best, wordMatch(term, field, word) * field.weight);
       }
     }
     if (best === 0) return 0;
@@ -166,9 +180,9 @@ function scoreTerms(terms: readonly Term[], doc: IndexedDoc): number {
 /**
  * Relevance of a product to a search: every query word must match a word of the product exactly,
  * by prefix (the last query word, from 2 letters) or, when no scanned product (here: this one)
- * has the word that way, with typos (`allowedTypos`). The score is the sum of each word's best
- * match times its field weight (`SEARCH_FIELD_WEIGHTS`), exact above prefix above typo. 0 = no
- * match (also for a query without words).
+ * has the word that way, with typos (`allowedTypos`); shade families match only exactly. The
+ * score is the sum of each word's best match times its field weight (`SEARCH_FIELD_WEIGHTS`),
+ * exact above prefix above typo. 0 = no match (also for a query without words).
  */
 export function searchScore(query: string, doc: SearchDoc): number {
   const words = tokenize(query);
@@ -296,7 +310,7 @@ function familyCache(): FamilyOf {
 }
 
 /**
- * The SearchDoc of a product: category name from the context; shade names from its variants plus
+ * The SearchDoc of a product: category name from the context; shade names from its variants and
  * their families' labels, so "red lipstick" finds a lipstick in Classic Red or in Crimson.
  */
 export function searchDoc(
@@ -304,14 +318,14 @@ export function searchDoc(
   ctx: SearchContext,
   family: FamilyOf = shadeFamily,
 ): SearchDoc {
-  const families = new Set(p.shades.map((s) => SHADE_FAMILY_LABEL[family(s.hex)]));
   return {
     title: p.title,
     brand: p.brand.name,
     store: p.seller.storeName,
     category: ctx.categories.find((c) => c.id === p.categoryId)?.name ?? '',
     tags: p.tags,
-    shades: [...p.shades.map((s) => s.name), ...families],
+    shades: p.shades.map((s) => s.name),
+    shadeFamilies: [...new Set(p.shades.map((s) => SHADE_FAMILY_LABEL[family(s.hex)]))],
   };
 }
 

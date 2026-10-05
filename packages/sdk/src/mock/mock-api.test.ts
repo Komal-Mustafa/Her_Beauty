@@ -153,6 +153,14 @@ describe('mockApi.search', () => {
     }
   });
 
+  it('matches a shade family only as a whole word ("brow" is no brown lipstick)', async () => {
+    const brow = await mockApi.search({ q: 'brow', pageSize: 48 });
+    expect(slugsOf(brow.items)).toEqual(['lumiere-brow-pomade']);
+    expect((await mockApi.search({ q: 'matte brow' })).total).toBe(0);
+    const brown = await mockApi.search({ q: 'brown', pageSize: 48 });
+    expect(slugsOf(brown.items)).toContain('velvet-matte-lipstick');
+  });
+
   it('finds Lumière without the accent', async () => {
     const { items } = await mockApi.search({ q: 'lumiere', pageSize: 48 });
     const lumiere = products.filter((p) => p.brand.slug === 'lumiere');
