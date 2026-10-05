@@ -27,6 +27,20 @@ export function BuyBox({ children }: { children?: ReactNode }) {
     .filter((v) => v.shadeName)
     .map((v) => ({ name: v.shadeName ?? '', hex: v.shadeHex ?? NO_HEX, soldOut: v.stock <= 0 }));
 
+  const picker =
+    kind === 'shade' && shades.length > 0 ? (
+      <ShadePicker
+        shades={shades}
+        value={variant.shadeName ?? ''}
+        onChange={(name) => {
+          const next = product.variants.find((v) => v.shadeName === name);
+          if (next) selectVariant(next.id);
+        }}
+      />
+    ) : kind === 'size' ? (
+      <SizePills variants={product.variants} value={variant.id} onChange={selectVariant} />
+    ) : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -61,25 +75,19 @@ export function BuyBox({ children }: { children?: ReactNode }) {
         size="lg"
       />
 
-      <div>
-        {kind === 'shade' && shades.length > 0 ? (
-          <ShadePicker
-            shades={shades}
-            value={variant.shadeName ?? ''}
-            onChange={(name) => {
-              const next = product.variants.find((v) => v.shadeName === name);
-              if (next) selectVariant(next.id);
-            }}
-          />
-        ) : null}
-        {kind === 'size' ? (
-          <SizePills variants={product.variants} value={variant.id} onChange={selectVariant} />
-        ) : null}
-        {/* Always in the DOM so a change of variant is announced; takes no room when empty. */}
-        <div aria-live="polite" className="[&:not(:empty)]:mt-3 first:[&:not(:empty)]:mt-0">
-          {note ? <Badge kind={note.tone}>{note.text}</Badge> : null}
+      {picker || note ? (
+        <div>
+          {picker}
+          {/*
+           * With a picker, always in the DOM so a change of variant is announced; takes no room
+           * when empty. Without one the variant cannot change, and a product with neither a
+           * picker nor a note renders nothing here (an empty block would double the gap).
+           */}
+          <div aria-live="polite" className="[&:not(:empty)]:mt-3 first:[&:not(:empty)]:mt-0">
+            {note ? <Badge kind={note.tone}>{note.text}</Badge> : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <QuantityStepper value={qty} max={maxQuantity(variant.stock)} onChange={setQty} />
 

@@ -13,10 +13,11 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { addToCart } from '@/lib/cart-store';
+import { addToCart, useCart } from '@/lib/cart-store';
 import { flyToCart } from '@/lib/fly-to-cart';
-import { cartToast } from './cart-toast';
+import { cartToast, itemLimitText } from './cart-toast';
 import {
+  addableQuantity,
   cartTitle,
   clampQuantity,
   maxQuantity,
@@ -58,6 +59,7 @@ type ProductProviderProps = {
  */
 export function ProductProvider({ product, initialVariantId, children }: ProductProviderProps) {
   const toast = useToast();
+  const cart = useCart();
   const kind = optionKind(product.variants);
   const [variantId, setVariantId] = useState(initialVariantId);
   const [qty, setQtyState] = useState(1);
@@ -89,20 +91,27 @@ export function ProductProvider({ product, initialVariantId, children }: Product
       const image = product.images[0];
       if (variant.stock <= 0 || !image) return;
       const title = cartTitle(product, variant, kind);
-      const result = addToCart({
-        variantId: variant.id,
-        productSlug: product.slug,
-        title,
-        image: image.url,
-        unitPrice: variant.price,
-        qty,
-      });
+      // The 1…min(10, stock) limit counts what is already in the cart, and the toast names what
+      // was actually added (docs/p5-catalog.md §5 "Buy box").
+      const inCart = cart.find((l) => l.variantId === variant.id)?.qty ?? 0;
+      const n = addableQuantity(qty, variant.stock, inCart);
+      const result =
+        n > 0
+          ? addToCart({
+              variantId: variant.id,
+              productSlug: product.slug,
+              title,
+              image: image.url,
+              unitPrice: variant.price,
+              qty: n,
+            })
+          : 'max-qty';
+      const added = n > 1 ? `${n} × ${title}` : title;
       toast.show(
-        cartToast(
-          result,
-          qty > 1 ? `${qty} × ${title}` : title,
-          'Please refresh the page and try again.',
-        ),
+        cartToast(result, n < qty ? `${added}. ${itemLimitText(variant.stock)}` : added, {
+          whenInvalid: 'Please refresh the page and try again.',
+          stock: variant.stock,
+        }),
       );
       if (result !== 'added') return;
       const shown = galleryImageRef.current?.querySelector('img') ?? null;
@@ -111,7 +120,7 @@ export function ProductProvider({ product, initialVariantId, children }: Product
         from: [shown, from],
       });
     },
-    [product, variant, kind, qty, toast],
+    [product, variant, kind, qty, cart, toast],
   );
 
   const shadeHex = variant.shadeHex ?? product.shades[0]?.hex ?? COLORS_3D.pinkSoft;

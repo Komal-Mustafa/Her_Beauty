@@ -66,9 +66,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
+      {/* `--toast-offset`: room a page keeps at the bottom of the window, e.g. a sticky buy bar. */}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(92vw,380px)] flex-col gap-3"
+        className="pointer-events-none fixed bottom-[calc(1rem+var(--toast-offset,0px))] right-4 z-[60] flex w-[min(92vw,380px)] flex-col gap-3"
       >
         {items.map((t) => {
           const Icon = ICON[t.tone];

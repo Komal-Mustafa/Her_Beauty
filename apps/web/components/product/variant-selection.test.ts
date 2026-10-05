@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAX_QTY } from '@/lib/cart-store';
 import { lipOil, lipstick, perfume } from './test-product';
 import {
+  addableQuantity,
   cartTitle,
   clampQuantity,
   initialVariant,
@@ -108,6 +109,17 @@ describe('stock and quantity', () => {
     expect(maxQuantity(25)).toBe(10);
     expect(maxQuantity(3)).toBe(3);
     expect(maxQuantity(0)).toBe(0);
+  });
+
+  it('adds no more than the limit leaves room for next to what the cart holds', () => {
+    expect(addableQuantity(4, 25, 0)).toBe(4);
+    expect(addableQuantity(4, 25, 8)).toBe(2);
+    expect(addableQuantity(1, 25, 10)).toBe(0);
+    expect(addableQuantity(3, 3, 2)).toBe(1);
+    expect(addableQuantity(1, 3, 3)).toBe(0);
+    // A line above today's stock (it sold since) leaves nothing to add, never a negative.
+    expect(addableQuantity(2, 2, 5)).toBe(0);
+    expect(addableQuantity(1, 0, 0)).toBe(0);
   });
 
   it('keeps a quantity within 1…max', () => {

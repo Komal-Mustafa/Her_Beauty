@@ -79,6 +79,14 @@ export function maxQuantity(stock: number): number {
   return Math.max(0, Math.min(MAX_QTY_PER_ITEM, Math.trunc(stock)));
 }
 
+/**
+ * How many of `qty` can still go in the cart: the per-item limit (`maxQuantity`) minus what the
+ * cart already holds of this variant; 0 when nothing more fits.
+ */
+export function addableQuantity(qty: number, stock: number, inCart: number): number {
+  return Math.max(0, Math.min(Math.trunc(qty), maxQuantity(stock) - inCart));
+}
+
 /** A typed or stepped quantity kept within 1…max (1 when nothing can be added). */
 export function clampQuantity(qty: number, max: number): number {
   if (!Number.isFinite(qty)) return 1;

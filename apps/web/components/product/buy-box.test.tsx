@@ -44,12 +44,25 @@ const toast = () => screen.getByRole('status');
 const storedCart = (): CartLine[] =>
   JSON.parse(window.localStorage.getItem(CART_STORAGE_KEY) ?? '[]') as CartLine[];
 
-/** Captures the sticky bar's observer so a test can say where the buy box button is. */
-const observers: { callback: IntersectionObserverCallback; targets: Element[] }[] = [];
+/**
+ * Stands in for the browser's IntersectionObserver as far as the sticky bar needs: it keeps the
+ * root margin and, like a browser, calls back only when a move changes whether the observed
+ * button intersects the root (the window, 800 px tall, plus the margin).
+ */
+const VIEWPORT = 800;
+type Observed = {
+  callback: IntersectionObserverCallback;
+  targets: Element[];
+  /** Bottom root margin in px. */
+  below: number;
+  intersecting?: boolean;
+};
+const observers: Observed[] = [];
 class FakeIntersectionObserver {
-  private readonly entry: (typeof observers)[number];
-  constructor(callback: IntersectionObserverCallback) {
-    this.entry = { callback, targets: [] };
+  private readonly entry: Observed;
+  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+    const below = Number.parseFloat(options?.rootMargin?.split(' ')[2] ?? '0');
+    this.entry = { callback, targets: [], below };
     observers.push(this.entry);
   }
   observe(el: Element) {
@@ -64,12 +77,17 @@ class FakeIntersectionObserver {
   }
 }
 
-/** Reports the observed button as on screen, above the viewport or below it. */
+/** Puts the observed button on screen, above the window or below it (a scroll or a jump). */
 function mainButtonIs(where: 'visible' | 'above' | 'below') {
   const live = observers.filter((o) => o.targets.length > 0).at(-1)!;
+  const top = where === 'above' ? -120 : where === 'below' ? 900 : 300;
+  const bottom = top + 48;
+  const isIntersecting = bottom >= 0 && top <= VIEWPORT + live.below;
+  if (live.intersecting === isIntersecting) return;
+  live.intersecting = isIntersecting;
   const entry = {
-    isIntersecting: where === 'visible',
-    boundingClientRect: { top: where === 'above' ? -120 : where === 'below' ? 900 : 300 },
+    isIntersecting,
+    boundingClientRect: { top, bottom },
     target: live.targets[0],
   } as unknown as IntersectionObserverEntry;
   act(() => live.callback([entry], {} as IntersectionObserver));
@@ -85,6 +103,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('BuyBox', () => {
@@ -130,6 +149,55 @@ describe('BuyBox', () => {
       imageSrc: '/placeholders/lipstick-1.svg',
       from: [null, add],
     });
+  });
+
+  it('adds only what fits next to the line already in the cart and says how many', async () => {
+    const line = (qty: number) => ({
+      variantId: 'velvet-v1',
+      productSlug: 'velvet-matte-lipstick',
+      title: 'Velvet Matte Lipstick, Berry Kiss',
+      image: '/placeholders/lipstick-1.svg',
+      unitPrice: 185000,
+      qty,
+    });
+    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify([line(8)]));
+    await renderBuyBox();
+    fireEvent.change(input(), { target: { value: '4' } });
+    fireEvent.blur(input());
+    fireEvent.click(box().getByRole('button', { name: 'Add to cart' }));
+
+    expect(storedCart()).toEqual([line(10)]);
+    expect(screen.getByRole('link', { name: 'Cart, 10 items' })).toBeTruthy();
+    expect(
+      within(toast()).getByText(
+        '2 × Velvet Matte Lipstick, Berry Kiss. You can buy up to 10 of one item per order.',
+      ),
+    ).toBeTruthy();
+    expect(fly).toHaveBeenCalledTimes(1);
+  });
+
+  it('never puts more than the stock in the cart over repeated adds', async () => {
+    const product = lipstick();
+    product.variants[0] = { ...product.variants[0]!, stock: 3 };
+    await renderBuyBox(product);
+    fireEvent.click(box().getByRole('button', { name: 'Increase quantity' }));
+    const add = box().getByRole('button', { name: 'Add to cart' });
+    fireEvent.click(add);
+    expect(storedCart()[0]?.qty).toBe(2);
+    expect(within(toast()).getByText('2 × Velvet Matte Lipstick, Berry Kiss')).toBeTruthy();
+
+    // Two more asked for, one left.
+    fireEvent.click(add);
+    expect(storedCart()[0]?.qty).toBe(3);
+    expect(
+      screen.getByText('Velvet Matte Lipstick, Berry Kiss. Only 3 left in stock.'),
+    ).toBeTruthy();
+
+    fireEvent.click(add);
+    expect(storedCart()[0]?.qty).toBe(3);
+    expect(screen.getByText('Already in your cart')).toBeTruthy();
+    expect(screen.getAllByText('Only 3 left in stock.')).toHaveLength(1);
+    expect(fly).toHaveBeenCalledTimes(2);
   });
 
   it('says so and does not fly when the cart cannot take the item', async () => {
@@ -240,6 +308,9 @@ describe('BuyBox', () => {
   it('has no picker for a single variant and adds it under the product title', async () => {
     await renderBuyBox(lipOil());
     expect(box().queryByRole('radio')).toBeNull();
+    // Nothing between the price and the quantity: an empty block would double the gap.
+    const price = box().getByText(/1,200/).closest('.flex-col > *');
+    expect(price?.nextElementSibling?.textContent).toContain('Quantity');
     fireEvent.click(box().getByRole('button', { name: 'Add to cart' }));
     expect(storedCart()[0]).toMatchObject({ variantId: 'silk-lip-oil-v1', title: 'Silk Lip Oil' });
     expect(within(toast()).getByText('Silk Lip Oil')).toBeTruthy();
@@ -271,6 +342,51 @@ describe('StickyBuyBar', () => {
     mainButtonIs('visible');
     expect(bar().hasAttribute('inert')).toBe(true);
     expect(bar().className).toContain('translate-y-full');
+  });
+
+  it('follows a jump straight past the button and back (#reviews, back to the top)', async () => {
+    await renderBuyBox();
+    // On load the button is below the fold, then the rating link jumps to #reviews.
+    mainButtonIs('below');
+    expect(bar().hasAttribute('inert')).toBe(true);
+    mainButtonIs('above');
+    expect(bar().hasAttribute('inert')).toBe(false);
+    // Back to the top in one go: the button is below the fold again.
+    mainButtonIs('below');
+    expect(bar().hasAttribute('inert')).toBe(true);
+  });
+
+  it('keeps focus scrolling and toasts clear of the bar only while it is shown', async () => {
+    // jsdom does no layout: the bar is 72 px tall below 1024 px.
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.classList.contains('sticky') ? 72 : 0;
+    });
+    const html = document.documentElement.style;
+    await renderBuyBox();
+    expect(html.getPropertyValue('--toast-offset')).toBe('');
+
+    mainButtonIs('above');
+    expect(html.getPropertyValue('--toast-offset')).toBe('72px');
+    expect(html.getPropertyValue('scroll-padding-bottom')).toBe('calc(72px + 1rem)');
+
+    mainButtonIs('visible');
+    expect(html.getPropertyValue('--toast-offset')).toBe('');
+    expect(html.getPropertyValue('scroll-padding-bottom')).toBe('');
+
+    mainButtonIs('above');
+    cleanup();
+    expect(html.getPropertyValue('--toast-offset')).toBe('');
+    expect(html.getPropertyValue('scroll-padding-bottom')).toBe('');
+  });
+
+  it('reserves nothing where the bar is not displayed (from 1024 px)', async () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(0);
+    await renderBuyBox();
+    mainButtonIs('above');
+    expect(document.documentElement.style.getPropertyValue('--toast-offset')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('scroll-padding-bottom')).toBe('');
   });
 
   it('shows the shade and price and adds from its own button', async () => {
