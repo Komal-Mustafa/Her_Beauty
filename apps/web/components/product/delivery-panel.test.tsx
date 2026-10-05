@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { DeliveryEstimate, PkCity } from '@hb/types';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CITY_STORAGE_KEY } from '@/lib/city-store';
 import type { DeliveryEstimateResult } from './delivery-text';
@@ -97,6 +98,30 @@ describe('DeliveryPanel', () => {
     expect(status().textContent).toBe(
       '5–9 days · Delivery fee confirmed at checkout · free over Rs 3,000 · Cash on delivery available',
     );
+  });
+
+  it('does not flash the prompt before a remembered city after hydration', async () => {
+    window.localStorage.setItem(CITY_STORAGE_KEY, '"Karachi"');
+    const answer = deferred();
+    const getEstimate = vi.fn<GetEstimate>().mockReturnValueOnce(answer.promise);
+    vi.resetModules();
+    const { DeliveryPanel } = await import('./delivery-panel');
+    const ui = <DeliveryPanel productSlug={SLUG} getEstimate={getEstimate} />;
+    // The server knows no city: an empty result line, not "Choose your city…".
+    const html = renderToString(ui);
+    expect(html).not.toContain('Choose your city to see');
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.append(container);
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => seen.push(status().textContent ?? ''));
+    observer.observe(container, { subtree: true, childList: true, characterData: true });
+    render(ui, { container, hydrate: true });
+    await act(async () => answer.settle({ ok: true, estimate: estimate('Karachi') }));
+    observer.disconnect();
+    expect(select().value).toBe('Karachi');
+    expect(status().textContent).toMatch(/^2–4 days/);
+    expect(seen.some((text) => text.startsWith('Choose your city'))).toBe(false);
   });
 
   it('drops a remembered city that is not on the list', async () => {

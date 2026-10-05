@@ -2,7 +2,7 @@
 
 import type { PkCity } from '@hb/types';
 import { ChevronDown, Truck } from 'lucide-react';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { setCity, useCity } from '@/lib/city-store';
 import {
   CITY_GROUPS,
@@ -23,6 +23,20 @@ type DeliveryPanelProps = {
 /** One request: the city and how many times the shopper has chosen or retried. */
 type Answer = { key: string; result: DeliveryEstimateResult };
 
+const noSubscription = () => () => {};
+
+/**
+ * False in the server HTML and while hydrating, when the remembered city is not known yet: the
+ * prompt to choose waits for it, so a returning shopper never sees it flash before her city.
+ */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
+}
+
 /**
  * "Delivery to [city ▾]" under Add to cart (docs/p5-catalog.md §5 "Delivery estimate"): a native
  * select of the listed cities by province, remembered in `hb_city_v1`, and the estimate for the
@@ -32,6 +46,7 @@ type Answer = { key: string; result: DeliveryEstimateResult };
  */
 export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) {
   const id = useId();
+  const hydrated = useHydrated();
   const city = useCity();
   // Bumped by every choice and retry, so each one is a new request even for the same city.
   const [attempt, setAttempt] = useState(0);
@@ -57,9 +72,11 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
   // Until the answer for this request arrives: "Checking…" once it is slow, before that the
   // previous answer (or nothing), so a quick answer replaces it without a flash.
   const settled = answer?.key === key ? answer.result : null;
-  const shown: DeliveryEstimateResult | 'prompt' | 'loading' | null = !city
-    ? 'prompt'
-    : (settled ?? (slowKey === key ? 'loading' : (answer?.result ?? null)));
+  const shown: DeliveryEstimateResult | 'prompt' | 'loading' | null = !hydrated
+    ? null
+    : !city
+      ? 'prompt'
+      : (settled ?? (slowKey === key ? 'loading' : (answer?.result ?? null)));
 
   let line: ReactNode = null;
   if (shown === 'prompt') line = 'Choose your city to see delivery time and cost.';
