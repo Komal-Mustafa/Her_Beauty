@@ -1,13 +1,29 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FilterDrawer } from './filter-drawer';
 import { params, renderListing } from './test-listing';
 
 const push = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 
-afterEach(cleanup);
+/** A phone-width window that can be widened past 1024 px. */
+const media = { matches: false, listeners: new Set<() => void>() };
+beforeEach(() => {
+  media.matches = false;
+  media.listeners.clear();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return query === '(min-width: 64rem)' && media.matches;
+    },
+    addEventListener: (_: string, fn: () => void) => media.listeners.add(fn),
+    removeEventListener: (_: string, fn: () => void) => media.listeners.delete(fn),
+  }));
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 /** The Filters button as a shopper reaches it: focused, then pressed. */
 async function open() {
@@ -49,5 +65,15 @@ describe('FilterDrawer', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Show 6 products' })));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(button);
+  });
+
+  it('closes itself when the window grows to the sidebar layout', async () => {
+    renderListing(<FilterDrawer />);
+    await open();
+    await act(async () => {
+      media.matches = true;
+      for (const fn of media.listeners) fn();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

@@ -179,9 +179,18 @@ describe('ActiveFilters', () => {
 
   it('a modified click follows the link instead', () => {
     renderListing(<ActiveFilters />, { params: params({ brand: ['glow'] }) });
+    // The browser would open the link; jsdom cannot, so the test stops it after the chip's handler.
+    let followed = false;
+    const stop = (event: MouseEvent) => {
+      followed = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener('click', stop);
     fireEvent.click(screen.getByRole('link', { name: 'Remove filter Brand: Glow' }), {
       ctrlKey: true,
     });
+    document.removeEventListener('click', stop);
+    expect(followed).toBe(true);
     expect(push).not.toHaveBeenCalled();
   });
 

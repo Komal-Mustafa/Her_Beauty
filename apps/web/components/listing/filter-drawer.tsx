@@ -26,6 +26,16 @@ export function FilterDrawer({ className }: { className?: string }) {
     wasOpen.current = open;
   }, [open]);
 
+  // From 1024 px the filters are in the sidebar: a drawer left open by resizing closes itself.
+  useEffect(() => {
+    if (!open) return;
+    const wide = window.matchMedia('(min-width: 64rem)');
+    const close = () => wide.matches && setOpen(false);
+    close();
+    wide.addEventListener('change', close);
+    return () => wide.removeEventListener('change', close);
+  }, [open]);
+
   return (
     <>
       <Button
