@@ -5,11 +5,13 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { BuyBox } from '@/components/product/buy-box';
+import { DeliveryPanel } from '@/components/product/delivery-panel';
 import { ProductCarousel } from '@/components/product/product-carousel';
 import { ProductProvider } from '@/components/product/product-context';
 import { ProductDetails } from '@/components/product/product-details';
 import { ProductGallery } from '@/components/product/product-gallery';
 import { ProductReviews } from '@/components/product/product-reviews';
+import { RecentlyViewed } from '@/components/product/recently-viewed';
 import { RecordProductView } from '@/components/product/record-view';
 import { SellerCard } from '@/components/product/seller-card';
 import { StickyBuyBar } from '@/components/product/sticky-buy-bar';
@@ -19,6 +21,7 @@ import { descriptionText, excerpt } from '@/lib/sanitize';
 import { breadcrumbJsonLd, productJsonLd, type Crumb } from '@/lib/seo/json-ld';
 import { JsonLd } from '@/lib/seo/json-ld-script';
 import { SITE } from '@/lib/site';
+import { deliveryEstimate, recentlyViewedCards } from './actions';
 import { loadProduct } from './load-product';
 
 type PageProps = {
@@ -66,9 +69,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 /**
- * Product page (docs/p5-catalog.md §5): gallery and buy box, details, reviews and two carousels.
- * The product is required (unknown → 404, settled by layout.tsx before streaming starts);
- * everything else is `optional()` and hides or falls back when it fails.
+ * Product page (docs/p5-catalog.md §5): gallery and buy box with the delivery estimate, details,
+ * reviews and three carousels. The product is required (unknown → 404, settled by layout.tsx
+ * before streaming starts); everything else is `optional()` and hides or falls back when it
+ * fails. The delivery estimate and Recently viewed depend on the shopper's browser (city and
+ * history in localStorage), so they load on the client through the server actions in actions.ts.
  */
 export default async function ProductPage({ params, searchParams }: PageProps) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
@@ -129,6 +134,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
           <ProductGallery />
           <div className="mt-8 md:sticky md:top-24 md:mt-0">
             <BuyBox>
+              <DeliveryPanel productSlug={product.slug} getEstimate={deliveryEstimate} />
               <SellerCard seller={product.seller} store={store} />
               <TrustStrip className="md:grid-cols-1" />
             </BuyBox>
@@ -154,6 +160,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
             title="Similar products"
             products={others(similar, product.id)}
           />
+          <RecentlyViewed productId={product.id} loadCards={recentlyViewedCards} />
         </div>
       </Container>
 
