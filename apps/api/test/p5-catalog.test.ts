@@ -214,6 +214,20 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       expect(none.facets.brands.every((b) => b.count === 0)).toBe(true);
     });
 
+    it('uses typos only for a word no product has, and finds shades by family', async () => {
+      const having = (word: string) =>
+        fixtureProducts.filter(
+          (p) => p.title.toLowerCase().split(' ').includes(word) || p.tags.includes(word),
+        );
+      for (const word of ['blush', 'brush']) {
+        const res = await search(`?q=${word}&pageSize=48`);
+        expect(sorted(slugs(res.items)), word).toEqual(sorted(having(word).map((p) => p.slug)));
+      }
+      const red = await search('?q=red%20lipstick&pageSize=48');
+      expect(slugs(red.items)).toContain('mehr-liquid-lipstick'); // Chilli: no "red" in the name
+      for (const card of red.items) expect(families(card), card.slug).toContain('red');
+    });
+
     it('never returns hidden products, even by their exact title', async () => {
       const res = await search(`?q=${encodeURIComponent(hidden.title)}&pageSize=48`);
       expect(res.total).toBe(0);
@@ -731,6 +745,10 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       { q: 'sunscrean' },
       { q: 'saffron & co' },
       { q: 'xyzzy' },
+      { q: 'blush' },
+      { q: 'brush', pageSize: 48 },
+      { q: 'red lipstick' },
+      { q: 'blush', category: 'tools' },
       { category: 'lips', shade: ['red', 'berry'] },
       { category: 'skincare', skinType: ['oily'], minRating: 4 },
       { brand: ['glow', 'velvet'], sort: 'price_asc' },
@@ -763,6 +781,11 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       { isNew: true, limit: 100 },
       { q: 'serum', limit: 100 },
       { category: 'eyes', sort: 'rating', limit: 100 },
+      { q: 'red lipstick', limit: 100 },
+      // The API loads only the Tools rows: "blush" has no exact match there, so both read it as
+      // a typo of "brush" (search judges against every product and finds nothing).
+      { q: 'blush', category: 'tools', limit: 100 },
+      { q: 'blush', seller: 'beauty-point', limit: 100 },
     ];
 
     it.each(productQueries.map((q) => [JSON.stringify(q), q] as const))(
