@@ -298,13 +298,13 @@ function SaleSwitch({ count, checked, onChange }: SaleSwitchProps) {
         onChange={(e) => onChange(e.target.checked)}
         className="peer sr-only"
       />
-      <span className="min-w-0 flex-1 text-sm text-ink-900">
+      <span aria-hidden className="min-w-0 flex-1 text-sm text-ink-900">
         On sale only
-        <span aria-hidden className="ml-2 text-xs tabular-nums text-ink-500">
+        <span className="ml-2 text-xs tabular-nums text-ink-500">
           {count.toLocaleString('en-PK')}
         </span>
-        <span className="sr-only">, {productCount(count)}</span>
       </span>
+      <span className="sr-only">On sale only, {productCount(count)}</span>
       <span
         aria-hidden
         className="relative h-6 w-11 shrink-0 rounded-pill bg-ink-200 transition-colors duration-base ease-soft peer-checked:bg-pink-600 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-pink-400 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-pill after:bg-white after:shadow-soft after:transition-transform after:duration-base after:ease-soft peer-checked:after:translate-x-5 motion-reduce:after:transition-none"

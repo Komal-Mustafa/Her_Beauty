@@ -34,16 +34,17 @@ export function SortSelect({ id, className }: { id: string; className?: string }
       {keep.map(([key, value], i) => (
         <input key={`${key}-${i}`} type="hidden" name={key} value={value} />
       ))}
-      <label htmlFor={id} className="whitespace-nowrap text-sm text-ink-500">
+      <label htmlFor={id} className="shrink-0 whitespace-nowrap text-sm text-ink-500">
         Sort by
       </label>
-      <span className="relative">
+      {/* Shrinks on a 360 px phone so Filters and Sort share one row. */}
+      <span className="relative min-w-0">
         <select
           id={id}
           name="sort"
           value={params.sort ?? fallback}
           onChange={(e) => onChange(e.target.value)}
-          className="h-11 cursor-pointer appearance-none rounded-btn border border-ink-200 bg-white pl-3 pr-9 text-sm font-medium text-ink-900 transition duration-fast hover:border-pink-600 focus:border-pink-600 focus:outline-none focus:ring-4 focus:ring-pink-100"
+          className="h-11 w-full min-w-0 cursor-pointer appearance-none truncate rounded-btn border border-ink-200 bg-white pl-3 pr-9 text-sm font-medium text-ink-900 transition duration-fast hover:border-pink-600 focus:border-pink-600 focus:outline-none focus:ring-4 focus:ring-pink-100"
         >
           {options.map((o) => (
             <option key={o} value={o}>

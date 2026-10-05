@@ -67,7 +67,8 @@ export function ActiveFilters({ className }: { className?: string }) {
         to={cleared(params)}
         className="inline-flex min-h-11 items-center rounded-pill px-3 text-sm font-medium text-ink-900 underline underline-offset-4 transition-colors duration-fast hover:text-pink-700"
       >
-        Clear all<span className="sr-only"> filters</span>
+        <span aria-hidden>Clear all</span>
+        <span className="sr-only">Clear all filters</span>
       </FilterLink>
     </div>
   );

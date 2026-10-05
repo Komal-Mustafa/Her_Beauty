@@ -14,49 +14,57 @@ type FilterGroupProps = {
 
 /**
  * One filter group (docs/p5-catalog.md §2.1, §9): a fieldset whose legend is a disclosure button,
- * so the group keeps its name for assistive tech and can be folded away. Open by default.
+ * so the group keeps its name for assistive tech and can be folded away. Open by default. The
+ * divider is on a wrapper: a fieldset draws its legend over its own top border.
  */
 export function FilterGroup({ legend, children, className }: FilterGroupProps) {
   const [open, setOpen] = useState(true);
   const contentId = useId();
   return (
-    <fieldset
-      className={cn('min-w-0 border-t border-ink-200 py-3 first-of-type:border-t-0', className)}
-    >
-      <legend className="w-full">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={contentId}
-          onClick={() => setOpen((o) => !o)}
-          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-btn text-left text-[15px] font-semibold text-ink-900 transition-colors duration-fast hover:text-pink-700"
-        >
-          {legend}
-          <ChevronDown
-            aria-hidden
-            className={cn(
-              'h-4 w-4 shrink-0 text-gold-600 transition-transform duration-base ease-soft motion-reduce:transition-none',
-              open && 'rotate-180',
-            )}
-          />
-        </button>
-      </legend>
-      <div id={contentId} hidden={!open} className="pt-1">
-        {children}
-      </div>
-    </fieldset>
+    <div className={cn('border-t border-ink-200 py-2 first-of-type:border-t-0', className)}>
+      <fieldset className="min-w-0">
+        <legend className="w-full">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={contentId}
+            onClick={() => setOpen((o) => !o)}
+            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-btn text-left text-[15px] font-semibold text-ink-900 transition-colors duration-fast hover:text-pink-700"
+          >
+            {legend}
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                'h-4 w-4 shrink-0 text-gold-600 transition-transform duration-base ease-soft motion-reduce:transition-none',
+                open && 'rotate-180',
+              )}
+            />
+          </button>
+        </legend>
+        <div id={contentId} hidden={!open} className="pb-2">
+          {children}
+        </div>
+      </fieldset>
+    </div>
   );
 }
 
-/** "Glow" with its count; the count is read as ", 6 products" (docs/p5-catalog.md §9). */
+/**
+ * "Glow" with its count, read out as "Glow, 6 products" (docs/p5-catalog.md §9). The spoken name
+ * is one text: a flex row would put a space before the comma.
+ */
 function OptionText({ option }: { option: FacetOption }) {
   return (
     <>
-      <span className="min-w-0 flex-1 text-sm text-ink-900">{option.label}</span>
+      <span aria-hidden className="min-w-0 flex-1 text-sm text-ink-900">
+        {option.label}
+      </span>
       <span aria-hidden className="text-xs tabular-nums text-ink-500">
         {option.count.toLocaleString('en-PK')}
       </span>
-      <span className="sr-only">, {productCount(option.count)}</span>
+      <span className="sr-only">
+        {option.label}, {productCount(option.count)}
+      </span>
     </>
   );
 }

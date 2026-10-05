@@ -38,13 +38,11 @@ export function FilterDrawer({ className }: { className?: string }) {
         className={cn('h-11', className)}
       >
         <SlidersHorizontal aria-hidden className="h-4 w-4" />
-        Filters
-        {applied > 0 ? (
-          <span className="tabular-nums">
-            <span aria-hidden>({applied})</span>
-            <span className="sr-only">, {applied} applied</span>
-          </span>
-        ) : null}
+        {/* One spoken name ("Filters, 2 applied"): split text would be read with odd spaces. */}
+        <span aria-hidden className="tabular-nums">
+          Filters{applied > 0 ? ` (${applied})` : ''}
+        </span>
+        <span className="sr-only">{applied > 0 ? `Filters, ${applied} applied` : 'Filters'}</span>
       </Button>
       <Modal
         open={open}

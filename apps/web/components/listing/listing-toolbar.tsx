@@ -11,9 +11,9 @@ import { SortSelect } from './sort-select';
 export function ListingToolbar() {
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <FilterDrawer className="md:hidden" />
-        <SortSelect id="listing-sort" className="ml-auto" />
+      <div className="flex items-center justify-between gap-2 sm:gap-3">
+        <FilterDrawer className="shrink-0 px-3 sm:px-4 md:hidden" />
+        <SortSelect id="listing-sort" className="ml-auto min-w-0" />
       </div>
       <ActiveFilters />
     </div>

@@ -25,6 +25,16 @@ export function pageWindow(current: number, count: number): PageItem[] {
   return items;
 }
 
+/** "2" on screen, "Page 2" when read out (one text, so no stray spaces in the name). */
+function PageLabel({ page }: { page: number }) {
+  return (
+    <>
+      <span aria-hidden>{page}</span>
+      <span className="sr-only">Page {page}</span>
+    </>
+  );
+}
+
 type PaginationProps = {
   path: string;
   params: ListingParams;
@@ -92,13 +102,11 @@ export function Pagination({ path, params, pageCount, className }: PaginationPro
                   aria-current="page"
                   className={cn(cell, 'bg-pink-600 text-white shadow-soft')}
                 >
-                  <span className="sr-only">Page </span>
-                  {item}
+                  <PageLabel page={item} />
                 </span>
               ) : (
                 <Link href={href(item)} className={link}>
-                  <span className="sr-only">Page </span>
-                  {item}
+                  <PageLabel page={item} />
                 </Link>
               )}
             </li>
