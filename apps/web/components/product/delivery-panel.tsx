@@ -68,7 +68,7 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
     line = (
       <>
         <span className="font-medium text-ink-900">{deliveryDays(shown.estimate)}</span>
-        {deliveryTerms(shown.estimate).map((term) => ` · ${term}`)}
+        {` · ${deliveryTerms(shown.estimate).join(' · ')}`}
       </>
     );
   } else if (shown) line = 'We couldn’t get an estimate right now.';
