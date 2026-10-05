@@ -1,23 +1,40 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Prisma } from '@hb/db';
-import type { Paged, Product, ProductCard, ProductQuery } from '@hb/types';
+import {
+  estimateDelivery,
+  runSearch,
+  selectProducts,
+  toProductCard,
+  type DeliveryEstimate,
+  type Paged,
+  type PkCity,
+  type Product,
+  type ProductCard,
+  type ProductQuery,
+  type SearchContext,
+  type SearchQuery,
+  type SearchResult,
+} from '@hb/types';
 import { notFound } from '../common/errors';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   productInclude,
   sellerSelect,
+  shippingProfileSelect,
   toBrand,
-  toCard,
   toCategory,
   toProduct,
   toReview,
+  toShippingProfile,
   toStore,
   type ProductRow,
 } from './mappers';
 
 const DEFAULT_LIMIT = 24;
-const MAX_LIMIT = 100;
-/** Guard until search moves to Meilisearch (02-trd §4 search module). */
+/**
+ * Search, facets and sort run in memory over at most this many live products (newest first)
+ * until Meilisearch replaces them behind the same endpoints and types (docs/p5-catalog.md §3.3).
+ */
 const MAX_SCAN = 2000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -128,50 +145,71 @@ export class CatalogService {
     return rows.map((r) => toProduct(r, ratings.get(r.sellerId) ?? 0, sponsored.has(r.id)));
   }
 
+  /**
+   * Live products of visible sellers, newest first: the input order the shared sort keeps for
+   * ties (docs/p5-catalog.md §4). `narrow` only saves loading rows the filters drop anyway.
+   */
+  private async liveProducts(tx: Db, narrow: Prisma.ProductWhereInput = {}): Promise<Product[]> {
+    const rows = await tx.product.findMany({
+      where: { AND: [LIVE, narrow] },
+      include: productInclude,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: MAX_SCAN,
+    });
+    return this.hydrate(tx, rows);
+  }
+
+  /** Active categories in menu order: slugs for filters and facets, names for text search. */
+  private async searchContext(): Promise<SearchContext> {
+    const categories = await this.db.category.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true, slug: true, name: true },
+    });
+    return { categories };
+  }
+
+  /** GET /products: the shared filter and order (`selectProducts`), then an opaque cursor. */
   async products(q: ProductQuery): Promise<Paged<ProductCard>> {
-    const where: Prisma.ProductWhereInput = { ...LIVE };
-    if (q.category) where.category = { slug: q.category };
-    if (q.brand?.length) where.brand = { slug: { in: q.brand } };
-    if (q.seller || q.sellerType) {
-      where.seller = {
-        ...LIVE_SELLER,
-        ...(q.seller ? { slug: q.seller } : {}),
-        ...(q.sellerType ? { type: q.sellerType } : {}),
-      };
-    }
-    if (q.skinType?.length) where.skinTypes = { hasSome: q.skinType };
-    if (q.minRating !== undefined) where.ratingAvg = { gte: q.minRating };
-    if (q.q) {
-      where.OR = [
-        { title: { contains: q.q, mode: 'insensitive' } },
-        { brand: { name: { contains: q.q, mode: 'insensitive' } } },
-        { seller: { storeName: { contains: q.q, mode: 'insensitive' } } },
-      ];
-    }
-
-    let list = await this.publicRead(async (tx) =>
-      this.hydrate(
-        tx,
-        await tx.product.findMany({
-          where,
-          include: productInclude,
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: MAX_SCAN,
-        }),
-      ),
-    );
-    // Price lives on variants (cheapest active variant), so range + price sort run after load.
-    if (q.minPrice !== undefined) list = list.filter((p) => p.price >= (q.minPrice ?? 0));
-    if (q.maxPrice !== undefined) list = list.filter((p) => p.price <= (q.maxPrice ?? 0));
-    list = sortProducts(list, q.sort);
-
-    const limit = Math.min(q.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+    const [ctx, list] = await Promise.all([
+      this.searchContext(),
+      this.publicRead((tx) => this.liveProducts(tx, narrowProducts(q))),
+    ]);
+    const ordered = selectProducts(list, q, ctx);
+    const limit = q.limit ?? DEFAULT_LIMIT;
     const start = decodeCursor(q.cursor);
-    const page = list.slice(start, start + limit).map(toCard);
     return {
-      items: page,
-      nextCursor: start + limit < list.length ? encodeCursor(start + limit) : null,
+      items: ordered.slice(start, start + limit).map(toProductCard),
+      nextCursor: start + limit < ordered.length ? encodeCursor(start + limit) : null,
     };
+  }
+
+  /**
+   * GET /search: the shared `runSearch` over every live product (facets count products outside
+   * the current filters, so nothing is narrowed in SQL). Search params never reach SQL.
+   */
+  async search(q: SearchQuery): Promise<SearchResult> {
+    const [ctx, list] = await Promise.all([
+      this.searchContext(),
+      this.publicRead((tx) => this.liveProducts(tx)),
+    ]);
+    return runSearch(list, q, ctx);
+  }
+
+  /**
+   * GET /products/:slug/delivery: the seller's shipping settings and lightest rate for the zone
+   * between its city and the shopper's (shared `estimateDelivery`). A product that is not on
+   * sale (hidden, draft, or of a hidden seller) is 404.
+   */
+  async deliveryEstimate(slug: string, city: PkCity): Promise<DeliveryEstimate> {
+    const row = await this.publicRead((tx) =>
+      tx.product.findFirst({
+        where: { ...LIVE, slug },
+        select: { seller: { select: shippingProfileSelect } },
+      }),
+    );
+    if (!row) throw notFound('Product');
+    return estimateDelivery(row.seller.city ?? '', city, toShippingProfile(row.seller));
   }
 
   async product(slug: string): Promise<Product> {
@@ -240,23 +278,24 @@ export class CatalogService {
   }
 }
 
-export function sortProducts(list: Product[], sort: ProductQuery['sort']): Product[] {
-  const copy = [...list];
-  switch (sort) {
-    case 'newest':
-      return copy; // already newest first
-    case 'price_asc':
-      return copy.sort((a, b) => a.price - b.price);
-    case 'price_desc':
-      return copy.sort((a, b) => b.price - a.price);
-    case 'rating':
-      return copy.sort((a, b) => b.rating - a.rating || b.ratingCount - a.ratingCount);
-    case 'best_selling':
-      return copy.sort((a, b) => b.soldCount - a.soldCount);
-    default:
-      // relevance: sponsored first (clearly labelled), then best sellers
-      return copy.sort(
-        (a, b) => Number(b.sponsored) - Number(a.sponsored) || b.soldCount - a.soldCount,
-      );
+/**
+ * SQL conditions equal to (or looser than) the shared filters of a GET /products query, so only
+ * rows that can match are loaded. The shared filter still runs on the result and decides; text,
+ * price, shade, sale and new filters are left to it.
+ */
+function narrowProducts(q: ProductQuery): Prisma.ProductWhereInput {
+  const where: Prisma.ProductWhereInput = {};
+  if (q.category) where.category = { slug: q.category };
+  if (q.brand?.length) where.brand = { slug: { in: q.brand } };
+  if (q.seller || q.sellerType) {
+    where.seller = {
+      ...(q.seller ? { slug: q.seller } : {}),
+      ...(q.sellerType ? { type: q.sellerType } : {}),
+    };
   }
+  if (q.skinType?.length) where.skinTypes = { hasSome: q.skinType };
+  if (q.minRating !== undefined) where.ratingAvg = { gte: q.minRating };
+  // Product ids are UUIDs; anything else cannot match (and must not reach a uuid column).
+  if (q.ids?.length) where.id = { in: q.ids.filter((id) => UUID.test(id)) };
+  return where;
 }

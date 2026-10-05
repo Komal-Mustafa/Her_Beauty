@@ -1,9 +1,21 @@
 import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
-import { Id, ProductQuery, Slug } from '@hb/types';
+import { Id, PkCity, ProductQuery, SearchQuery, Slug } from '@hb/types';
 import { z } from 'zod';
-import { Public } from '../auth/decorators';
+import { PerMinute, Public } from '../auth/decorators';
 import { coerceQuery, parse } from '../common/validate';
 import { CatalogService } from './catalog.service';
+
+/** security.md §11: search is limited per IP. */
+const SEARCH_PER_MINUTE = 60;
+
+/** Query-string types shared by GET /products and GET /search (docs/p5-catalog.md §3.3). */
+const LIST_COERCION = {
+  arrays: ['brand', 'skinType', 'shade'],
+  numbers: ['minPrice', 'maxPrice', 'minRating'],
+  booleans: ['onSale', 'isNew'],
+};
+
+const DeliveryQuery = z.object({ city: PkCity }).strict();
 
 /** Public storefront reads (no account needed). */
 @Public()
@@ -31,16 +43,38 @@ export class CatalogController {
     return this.catalog.brand(parse(Slug, slug));
   }
 
+  /** The listing engine for every listing page: filters, facets, sort and numbered pages. */
+  @Get('search')
+  @PerMinute(SEARCH_PER_MINUTE)
+  search(@Query() raw: Record<string, unknown>) {
+    const query = parse(
+      SearchQuery.strict(),
+      coerceQuery(raw, {
+        ...LIST_COERCION,
+        numbers: [...LIST_COERCION.numbers, 'page', 'pageSize'],
+      }),
+    );
+    return this.catalog.search(query);
+  }
+
   @Get('products')
   products(@Query() raw: Record<string, unknown>) {
     const query = parse(
       ProductQuery.strict(),
       coerceQuery(raw, {
-        arrays: ['brand', 'skinType'],
-        numbers: ['minPrice', 'maxPrice', 'minRating', 'limit'],
+        ...LIST_COERCION,
+        arrays: [...LIST_COERCION.arrays, 'ids'],
+        numbers: [...LIST_COERCION.numbers, 'limit'],
       }),
     );
     return this.catalog.products(query);
+  }
+
+  /** Declared before `products/:slug` so the delivery path is never read as a product slug. */
+  @Get('products/:slug/delivery')
+  delivery(@Param('slug') slug: string, @Query() raw: Record<string, unknown>) {
+    const { city } = parse(DeliveryQuery, raw);
+    return this.catalog.deliveryEstimate(parse(Slug, slug), city);
   }
 
   @Get('products/:slug')

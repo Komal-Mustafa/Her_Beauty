@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ApiRequestError } from './http-api';
-import { createHttpApi } from './http-api';
+import { createHttpApi, sentFields } from './http-api';
 
 function fakeFetch(status: number, body: unknown) {
   return vi.fn(async (_url: string) => new Response(JSON.stringify(body), { status }));
@@ -20,6 +20,38 @@ describe('createHttpApi', () => {
       'http://api.test/v1/products?category=lips&brand=a%2Cb&minPrice=1000&sort=price_asc',
       expect.anything(),
     );
+  });
+
+  it('sends search filters as the API reads them: arrays by commas, booleans as true/false', async () => {
+    const f = fakeFetch(200, {});
+    const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: f });
+    await api.search({
+      q: 'rose & gold',
+      shade: ['red', 'berry'],
+      onSale: true,
+      isNew: false,
+      page: 2,
+      pageSize: 48,
+    });
+    await api.search();
+    await api.getProducts({ ids: ['a', 'b'], onSale: false });
+    expect(f.mock.calls.map(([url]) => url)).toEqual([
+      'http://api.test/v1/search?q=rose+%26+gold&shade=red%2Cberry&onSale=true&isNew=false&page=2&pageSize=48',
+      'http://api.test/v1/search',
+      'http://api.test/v1/products?ids=a%2Cb&onSale=false',
+    ]);
+  });
+
+  it('asks for a delivery estimate by product and city, null when the product is gone', async () => {
+    const f = fakeFetch(200, { zone: 'same_city' });
+    const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: f });
+    await api.getDeliveryEstimate('velvet-matte-lipstick', 'Rawalpindi');
+    expect(f).toHaveBeenCalledWith(
+      'http://api.test/v1/products/velvet-matte-lipstick/delivery?city=Rawalpindi',
+      expect.anything(),
+    );
+    const gone = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: fakeFetch(404, {}) });
+    await expect(gone.getDeliveryEstimate('nope', 'Lahore')).resolves.toBeNull();
   });
 
   it('returns null for a missing product instead of throwing', async () => {
@@ -50,6 +82,32 @@ describe('createHttpApi', () => {
       'limit=7',
       'limit=12',
     ]);
+  });
+
+  it('sends the configured headers with every request', async () => {
+    const f = fakeFetch(200, []);
+    const api = createHttpApi({
+      baseUrl: 'http://api.test/v1',
+      fetch: f,
+      headers: { 'x-hb-storefront-key': 'k' },
+    });
+    await api.getCategories();
+    await api.search({ q: 'kohl' });
+    for (const [, init] of f.mock.calls as unknown as [string, RequestInit][]) {
+      expect(init.headers).toEqual({ 'x-hb-storefront-key': 'k', accept: 'application/json' });
+    }
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves empty fields off the query string', async () => {
+    const f = fakeFetch(200, {});
+    const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: f });
+    await api.search({ q: '', category: 'lips', brand: undefined, page: 2 });
+    expect(f).toHaveBeenCalledWith(
+      'http://api.test/v1/search?category=lips&page=2',
+      expect.anything(),
+    );
+    expect(sentFields({ q: '', category: 'lips', sort: undefined })).toEqual({ category: 'lips' });
   });
 
   it('surfaces the API error code on failures', async () => {

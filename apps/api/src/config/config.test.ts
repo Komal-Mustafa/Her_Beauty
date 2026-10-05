@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { ConfigError, DEV_FALLBACKS, loadConfig } from './config';
+import { ConfigError, DEV_FALLBACKS, DEV_STOREFRONT_KEY, loadConfig } from './config';
 
 const pemPair = (type: 'ed25519' | 'ed448' = 'ed25519') => {
   const { privateKey, publicKey } = generateKeyPairSync(type as 'ed25519');
@@ -33,6 +33,10 @@ describe('loadConfig', () => {
     expect(c.trustProxy).toBe('loopback');
     expect(c.turnstileSecretKey).toBeNull();
     expect(c.hibpEnabled).toBe(false);
+    expect(c.storefrontKey).toBeNull();
+    expect(loadConfig({ STOREFRONT_API_KEY: DEV_STOREFRONT_KEY }).storefrontKey).toBe(
+      DEV_STOREFRONT_KEY,
+    );
   });
 
   it('production refuses to boot without keys, peppers and the encryption key', () => {
@@ -56,6 +60,9 @@ describe('loadConfig', () => {
     expect(() =>
       loadConfig({ ...production(), ENCRYPTION_KEY: DEV_FALLBACKS.encryptionKey }),
     ).toThrow(/ENCRYPTION_KEY/);
+    expect(() => loadConfig({ ...production(), STOREFRONT_API_KEY: DEV_STOREFRONT_KEY })).toThrow(
+      /STOREFRONT_API_KEY/,
+    );
   });
 
   it('production boots with a full, valid set (PEMs may use \\n escapes)', () => {
@@ -66,11 +73,15 @@ describe('loadConfig', () => {
       TRUST_PROXY: '1',
       HIBP_ENABLED: 'true',
       TURNSTILE_SECRET_KEY: 'x',
+      STOREFRONT_API_KEY: 'prod-storefront-key-0123456789abcdef',
     });
     expect(c.jwt.ephemeral).toBe(false);
     expect(c.trustProxy).toBe(1);
     expect(c.hibpEnabled).toBe(true);
     expect(c.turnstileSecretKey).toBe('x');
+    expect(c.storefrontKey).toBe('prod-storefront-key-0123456789abcdef');
+    // Optional: without it the storefront server's reads count against its own IP.
+    expect(loadConfig(env).storefrontKey).toBeNull();
   });
 
   it('rejects mismatched, non-Ed25519, half-set or malformed keys and bad values', () => {
@@ -87,5 +98,6 @@ describe('loadConfig', () => {
     );
     expect(() => loadConfig({ OTP_PEPPER: 'short' })).toThrow(/OTP_PEPPER/);
     expect(() => loadConfig({ HIBP_ENABLED: 'yes' })).toThrow(/HIBP_ENABLED/);
+    expect(() => loadConfig({ STOREFRONT_API_KEY: 'short' })).toThrow(/STOREFRONT_API_KEY/);
   });
 });

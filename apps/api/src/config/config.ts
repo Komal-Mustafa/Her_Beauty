@@ -27,6 +27,11 @@ export interface AppConfig {
   trustProxy: boolean | number | string;
   turnstileSecretKey: string | null;
   hibpEnabled: boolean;
+  /**
+   * Shared secret the storefront's own server sends on its catalogue reads, so they are not
+   * rate-limited as one client (common/throttler.guard.ts). Null = every request counts per IP.
+   */
+  storefrontKey: string | null;
 }
 
 /** Same values as .env.example. Never accepted in production. */
@@ -35,6 +40,9 @@ export const DEV_FALLBACKS = {
   otpPepper: 'dev-only-otp-pepper-change-me',
   encryptionKey: 'ZGV2LW9ubHktbm90LWEtc2VjcmV0LTMyLWJ5dGVzISE=',
 } as const;
+
+/** STOREFRONT_API_KEY in .env.example. Not a fallback (unset = no key); refused in production. */
+export const DEV_STOREFRONT_KEY = 'dev-only-storefront-key-change-me-0000';
 
 const optional = z.preprocess(
   (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
@@ -51,6 +59,7 @@ const EnvSchema = z.object({
   TRUST_PROXY: optional,
   TURNSTILE_SECRET_KEY: optional,
   HIBP_ENABLED: optional.pipe(z.enum(['true', 'false']).optional()),
+  STOREFRONT_API_KEY: optional.pipe(z.string().min(32).optional()),
 });
 
 export class ConfigError extends Error {
@@ -111,6 +120,17 @@ function parseEncryptionKey(value: string, isProduction: boolean): Buffer {
   return key;
 }
 
+function storefrontKey(value: string | undefined, isProduction: boolean, log: Logger) {
+  if (!isProduction) return value ?? null;
+  if (value === DEV_STOREFRONT_KEY) {
+    throw new ConfigError('STOREFRONT_API_KEY must not be the dev value in production');
+  }
+  if (!value) {
+    log.warn('STOREFRONT_API_KEY not set: the storefront server shares one per-IP rate limit');
+  }
+  return value ?? null;
+}
+
 /** "true"/"false", a hop count, or an Express trust list such as "loopback, 10.0.0.0/8". */
 function parseTrustProxy(value: string | undefined): AppConfig['trustProxy'] {
   if (value === undefined) return 'loopback';
@@ -150,5 +170,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: parseTrustProxy(e.TRUST_PROXY),
     turnstileSecretKey: e.TURNSTILE_SECRET_KEY ?? null,
     hibpEnabled: e.HIBP_ENABLED === 'true',
+    storefrontKey: storefrontKey(e.STOREFRONT_API_KEY, isProduction, log),
   };
 }

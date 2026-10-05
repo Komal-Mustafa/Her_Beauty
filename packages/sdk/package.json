@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./format": "./src/format.ts",
     "./fixtures": "./src/mock/fixtures.ts",
-    "./home-fixtures": "./src/mock/home-fixtures.ts"
+    "./home-fixtures": "./src/mock/home-fixtures.ts",
+    "./mock": "./src/mock/mock-api.ts"
   },
   "scripts": {
     "lint": "eslint .",

@@ -13,10 +13,13 @@ export function parse<T extends z.ZodType>(schema: T, input: unknown): z.infer<T
   return result.data;
 }
 
-/** Query strings arrive as strings; turn "a,b" into arrays and numeric strings into numbers. */
+/**
+ * Query strings arrive as strings; turn "a,b" into arrays, numeric strings into numbers and
+ * "true"/"false" into booleans. Anything else is left for the schema to reject.
+ */
 export function coerceQuery(
   raw: Record<string, unknown>,
-  opts: { arrays?: string[]; numbers?: string[] },
+  opts: { arrays?: string[]; numbers?: string[]; booleans?: string[] },
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...raw };
   for (const key of opts.arrays ?? []) {
@@ -26,6 +29,10 @@ export function coerceQuery(
   for (const key of opts.numbers ?? []) {
     const v = out[key];
     if (typeof v === 'string' && v.trim() !== '') out[key] = Number(v);
+  }
+  for (const key of opts.booleans ?? []) {
+    const v = out[key];
+    if (v === 'true' || v === 'false') out[key] = v === 'true';
   }
   return out;
 }

@@ -3,14 +3,18 @@ import type {
   AdSlotCode,
   Brand,
   Category,
+  DeliveryEstimate,
   FeaturedBrand,
   FeaturedReview,
   HeroScene,
   Paged,
+  PkCity,
   Product,
   ProductCard,
   ProductQuery,
   Review,
+  SearchQuery,
+  SearchResult,
   SellingPlan,
   ServedAd,
   Store,
@@ -27,8 +31,13 @@ export interface HbApi {
   getCategory(slug: string): Promise<Category | null>;
   getBrands(): Promise<Brand[]>;
   getBrand(slug: string): Promise<Brand | null>;
+  /** GET /products — cursor pages for carousels (`ids` = exactly these, in this order). */
   getProducts(query?: ProductQuery): Promise<Paged<ProductCard>>;
+  /** GET /search — the listing engine for every listing page: filters, facets, sort, pages. */
+  search(query?: SearchQuery): Promise<SearchResult>;
   getProduct(slug: string): Promise<Product | null>;
+  /** GET /products/:slug/delivery?city= — null when the product is not on sale. */
+  getDeliveryEstimate(productSlug: string, city: PkCity): Promise<DeliveryEstimate | null>;
   getReviews(productId: string): Promise<Review[]>;
   getStore(slug: string): Promise<Store | null>;
   getStores(): Promise<Store[]>;
