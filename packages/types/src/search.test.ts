@@ -10,6 +10,7 @@ import {
   normalizeText,
   pinSponsored,
   runSearch,
+  searchDoc,
   searchScore,
   selectProducts,
   shadeFamily,
@@ -203,6 +204,143 @@ describe('searchScore', () => {
     expect(searchScore('highlihgter', doc({ title: 'Highlighter' }))).toBeGreaterThan(0);
     expect(searchScore('hghlihgter', doc({ title: 'Highlighter' }))).toBeGreaterThan(0);
     expect(searchScore('hghlihgtr', doc({ title: 'Highlighter' }))).toBe(0); // 3 typos
+  });
+});
+
+describe('typos as a fallback', () => {
+  const tools: SearchContext = {
+    categories: [...ctx.categories, { id: 'c-tools', slug: 'tools', name: 'Tools' }],
+  };
+  const blush = product({ title: 'Peony Blush Compact', categoryId: 'c-face' });
+  const creamBlush = product({ title: 'Cream Blush Stick', categoryId: 'c-face' });
+  const kabuki = product({ title: 'Gold Kabuki Brush', categoryId: 'c-tools' });
+  const fan = product({ title: 'Highlighter Fan Brush', categoryId: 'c-tools' });
+  const lipstick = product({ title: 'Velvet Matte Lipstick' });
+  const all = [blush, creamBlush, kabuki, fan, lipstick];
+  const find = (q: string, list: readonly Product[] = all) =>
+    slugs(filterProducts(list, { q }, tools));
+
+  it('never gives a word that some product has a second meaning', () => {
+    expect(find('blush')).toEqual(slugs([blush, creamBlush]));
+    expect(find('brush')).toEqual(slugs([kabuki, fan]));
+    expect(find('BLUSH')).toEqual(find('blush'));
+  });
+
+  it('still rescues a misspelt word that no product has', () => {
+    expect(find('lipstik')).toEqual([lipstick.slug]);
+    expect(find('blushs')).toEqual(slugs([blush, creamBlush]));
+    // Without any blush in the scanned products, "blush" is read as a typo of "brush".
+    expect(find('blush', [kabuki, fan, lipstick])).toEqual(slugs([kabuki, fan]));
+  });
+
+  it('counts a prefix of the last word as a match without typos', () => {
+    const kajal = product({ title: 'Blue Kajal', categoryId: 'c-face' });
+    // "blus" starts "blush", so it is not also read as a typo of "blue".
+    expect(find('blus', [...all, kajal])).toEqual(slugs([blush, creamBlush]));
+    // An earlier word is no prefix: no product has "kabuk", so it may be "kabuki" with a typo.
+    expect(find('kabuk gold')).toEqual([kabuki.slug]);
+  });
+
+  it('decides per word', () => {
+    // "gold" is exact, "brsh" (4 letters, no product has it) may have one typo.
+    expect(find('gold brsh')).toEqual([kabuki.slug]);
+    // Both words exist, so neither is read as a typo, and no product has both.
+    expect(find('blush brush')).toEqual([]);
+  });
+
+  it('judges search against every scanned product and getProducts against its other filters', () => {
+    // Search: blushes exist, so "blush" in Tools finds nothing (and facets do not shift).
+    expect(slugs(filterProducts(all, { q: 'blush', category: 'tools' }, tools))).toEqual([]);
+    const facets = computeFacets(all, { q: 'blush', category: 'tools' }, tools);
+    expect(facets.categories.map((c) => [c.value, c.count])).toEqual([
+      ['lips', 0],
+      ['face', 2],
+      ['skincare', 0],
+      ['tools', 0],
+    ]);
+    expect(runSearch(all, { q: 'blush', category: 'tools' }, tools).total).toBe(0);
+    // getProducts: the API loads only the Tools rows, so the mock judges the same rows.
+    expect(slugs(selectProducts(all, { q: 'blush', category: 'tools' }, tools))).toEqual(
+      slugs([kabuki, fan]),
+    );
+    expect(slugs(selectProducts(all, { q: 'blush' }, tools))).toEqual(slugs([blush, creamBlush]));
+  });
+
+  it('scores a single document by the same rule', () => {
+    const doc: SearchDoc = {
+      title: 'Kabuki Brush',
+      brand: '',
+      store: '',
+      category: '',
+      tags: ['blush'],
+      shades: [],
+    };
+    // "blush" is in the tags, so the title's "brush" (a typo away) does not count.
+    expect(searchScore('blush', doc)).toBe(6);
+    expect(searchScore('blush', { ...doc, tags: [] })).toBe(4);
+  });
+});
+
+describe('shade families in text search', () => {
+  const chilli = { name: 'Chilli', hex: '#9E1B1B' };
+  const berry = { name: 'Berry Kiss', hex: '#8E1B4F' };
+  const nude = { name: 'Nude Silk', hex: '#C98A7A' };
+  const redLipstick = product({ title: 'Liquid Matte Lipstick', shades: [chilli, nude] });
+  const berryLipstick = product({ title: 'Satin Glow Lipstick', shades: [berry, nude] });
+  const redBlush = product({ title: 'Cream Blush Stick', categoryId: 'c-face', shades: [chilli] });
+  const all = [redLipstick, berryLipstick, redBlush];
+
+  it('lists each family label once, beside the shade names', () => {
+    expect(searchDoc(redLipstick, ctx).shades).toEqual(['Chilli', 'Nude Silk']);
+    expect(searchDoc(redLipstick, ctx).shadeFamilies).toEqual(['Red', 'Nude']);
+    expect(
+      searchDoc(product({ shades: [chilli, { name: 'Crimson', hex: '#B3122E' }] }), ctx)
+        .shadeFamilies,
+    ).toEqual(['Red']);
+    expect(searchDoc(product(), ctx).shadeFamilies).toEqual([]);
+  });
+
+  it('finds a product by a family none of its shade names spells', () => {
+    expect(slugs(filterProducts(all, { q: 'red lipstick' }, ctx))).toEqual([redLipstick.slug]);
+    expect(slugs(filterProducts(all, { q: 'red' }, ctx))).toEqual(slugs([redLipstick, redBlush]));
+    expect(slugs(filterProducts(all, { q: 'berry' }, ctx))).toEqual([berryLipstick.slug]);
+  });
+
+  it('weighs a family label like a shade name', () => {
+    const doc = searchDoc(redLipstick, ctx);
+    expect(searchScore('red', doc)).toBe(3);
+    expect(searchScore('chilli', doc)).toBe(3);
+    // Title words still rank first: "lipstick" (12) + "red" (3).
+    expect(searchScore('red lipstick', doc)).toBe(15);
+  });
+
+  it('matches a family only by the whole word, never by prefix or with a typo', () => {
+    const cocoa = { name: 'Cocoa', hex: '#7B4A3A' };
+    const bare = { name: 'Bare', hex: '#C98A7A' };
+    const plum = { name: 'Plum Wine', hex: '#8E1B4F' };
+    expect([cocoa, bare, plum].map((s) => shadeFamily(s.hex))).toEqual(['brown', 'nude', 'berry']);
+    const brownLipstick = product({ title: 'Liquid Matte Lipstick', shades: [cocoa, bare] });
+    const plumLipstick = product({ title: 'Satin Lipstick', shades: [plum] });
+    const pomade = product({
+      title: 'Brow Pomade',
+      categoryId: 'c-face',
+      shades: [{ name: 'Taupe', hex: '#8A7466' }],
+    });
+    const list = [brownLipstick, plumLipstick, pomade];
+    const find = (q: string) => slugs(filterProducts(list, { q }, ctx));
+    // "brow" is a word being typed: it may start "Brow…", not the hidden family "Brown".
+    expect(find('brow')).toEqual([pomade.slug]);
+    expect(find('bro')).toEqual([pomade.slug]);
+    expect(find('matte brow')).toEqual([]);
+    expect(find('brown')).toEqual([brownLipstick.slug, pomade.slug]); // Taupe is brown too
+    expect(find('nu')).toEqual([]);
+    expect(find('nude')).toEqual([brownLipstick.slug]);
+    // No product has "berri", yet it is no typo of the family "Berry" (a shade name would be).
+    expect(find('berri')).toEqual([]);
+    expect(find('berry')).toEqual([plumLipstick.slug]);
+    const doc = searchDoc(brownLipstick, ctx);
+    expect(searchScore('brow', doc)).toBe(0);
+    expect(searchScore('brown', doc)).toBe(3);
   });
 });
 

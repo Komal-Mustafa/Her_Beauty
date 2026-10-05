@@ -309,11 +309,31 @@ describe('BuyBox', () => {
     await renderBuyBox(lipOil());
     expect(box().queryByRole('radio')).toBeNull();
     // Nothing between the price and the quantity: an empty block would double the gap.
-    const price = box().getByText(/1,200/).closest('.flex-col > *');
+    const price = box().getByText(/1,200/).closest('.gap-6 > *');
     expect(price?.nextElementSibling?.textContent).toContain('Quantity');
     fireEvent.click(box().getByRole('button', { name: 'Add to cart' }));
     expect(storedCart()[0]).toMatchObject({ variantId: 'silk-lip-oil-v1', title: 'Silk Lip Oil' });
     expect(within(toast()).getByText('Silk Lip Oil')).toBeTruthy();
+  });
+
+  it('shows a single pack size under the price', async () => {
+    const oil = lipOil();
+    await renderBuyBox(lipOil({ variants: [{ ...oil.variants[0]!, sizeLabel: '6 ml' }] }));
+    expect(box().getByText('6 ml').parentElement?.textContent).toBe('Size: 6 ml');
+    cleanup();
+    await renderBuyBox(perfume());
+    // Size pills already say it.
+    expect(box().queryByText(/^Size: \d/)).toBeNull();
+  });
+
+  it('drops the quantity when no variant is in stock, and offers the wishlist', async () => {
+    const product = lipstick();
+    await renderBuyBox({ ...product, variants: product.variants.map((v) => ({ ...v, stock: 0 })) });
+    expect(box().queryByLabelText('Quantity')).toBeNull();
+    expect(
+      (box().getByRole('button', { name: 'Out of stock' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(box().getByRole('button', { name: 'Save to wishlist' })).toBeTruthy();
   });
 
   it('toggles the wishlist heart', async () => {

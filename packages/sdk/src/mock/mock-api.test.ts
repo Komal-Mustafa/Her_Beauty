@@ -129,6 +129,38 @@ describe('mockApi.search', () => {
     expect(slugsOf(items).sort()).toEqual(slugsOf(lipsticks).sort());
   });
 
+  it('reads "blush" and "brush" as themselves, not as typos of each other', async () => {
+    const having = (word: string) =>
+      products.filter(
+        (p) => p.title.toLowerCase().split(' ').includes(word) || p.tags.includes(word),
+      );
+    for (const word of ['blush', 'brush']) {
+      const { items } = await mockApi.search({ q: word, pageSize: 48 });
+      expect(slugsOf(items).sort(), word).toEqual(slugsOf(having(word)).sort());
+      expect(items.length, word).toBeGreaterThan(0);
+    }
+  });
+
+  it('finds "red lipstick" by shade family, also where no shade name says red', async () => {
+    const { items } = await mockApi.search({ q: 'red lipstick', pageSize: 48 });
+    expect(slugsOf(items)).toContain('mehr-liquid-lipstick'); // Chilli, a red-family shade
+    for (const item of items) {
+      const p = products.find((x) => x.slug === item.slug);
+      expect(
+        p?.shades.some((s) => shadeFamily(s.hex) === 'red'),
+        item.slug,
+      ).toBe(true);
+    }
+  });
+
+  it('matches a shade family only as a whole word ("brow" is no brown lipstick)', async () => {
+    const brow = await mockApi.search({ q: 'brow', pageSize: 48 });
+    expect(slugsOf(brow.items)).toEqual(['lumiere-brow-pomade']);
+    expect((await mockApi.search({ q: 'matte brow' })).total).toBe(0);
+    const brown = await mockApi.search({ q: 'brown', pageSize: 48 });
+    expect(slugsOf(brown.items)).toContain('velvet-matte-lipstick');
+  });
+
   it('finds Lumière without the accent', async () => {
     const { items } = await mockApi.search({ q: 'lumiere', pageSize: 48 });
     const lumiere = products.filter((p) => p.brand.slug === 'lumiere');
