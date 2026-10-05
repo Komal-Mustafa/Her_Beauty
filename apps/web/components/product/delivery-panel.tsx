@@ -129,8 +129,8 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
         </div>
       </div>
       {/* Room for the longest answer (a fee confirmed at checkout): three lines on a panel under
-          20.5rem (a 360 px phone), two from there; in rem, so it holds at any text size. */}
-      <div className="mt-3 flex min-h-15 flex-wrap items-start gap-x-3 @min-[20.5rem]:min-h-10">
+          21rem (a 360 px phone), two from there; in rem, so it holds at any text size. */}
+      <div className="mt-3 flex min-h-15 flex-wrap items-start gap-x-3 @min-[21rem]:min-h-10">
         <p id={`${id}-result`} role="status" className="text-sm leading-5 text-ink-500">
           {line}
         </p>
