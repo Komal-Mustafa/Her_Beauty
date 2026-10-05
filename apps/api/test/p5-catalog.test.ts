@@ -19,7 +19,13 @@ import {
   type ProductQuery,
   type SearchQuery,
 } from '@hb/types';
-import { ApiRequestError, createHttpApi, type HbApi } from '@hb/sdk';
+import {
+  ApiRequestError,
+  createHttpApi,
+  discountPercent as badgePercent,
+  STOREFRONT_KEY_HEADER as SDK_STOREFRONT_KEY_HEADER,
+  type HbApi,
+} from '@hb/sdk';
 import { mockApi } from '@hb/sdk/mock';
 import {
   categories as fixtureCategories,
@@ -28,6 +34,7 @@ import {
   sponsoredProductSlugs,
   stores as fixtureStores,
 } from '@hb/sdk/fixtures';
+import { STOREFRONT_KEY_HEADER } from '../src/common/throttler.guard';
 import { Api, createTestApp, ErrorBody, hasDb, nextIp } from './helpers';
 
 /**
@@ -366,6 +373,8 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       const off = discount.map((p) => discountPercent(p.price, p.compareAtPrice));
       expect(off).toEqual([...off].sort((a, b) => b - a));
       expect(off.every((n) => n > 0)).toBe(true);
+      // The "-n%" badge shoppers see is the sort key, so badges never go up down the list.
+      expect(discount.map((p) => badgePercent(p.price, p.compareAtPrice))).toEqual(off);
       for (let i = 1; i < discount.length; i++) {
         if (off[i] === off[i - 1]) {
           expect(must(discount[i], 'item').price).toBeGreaterThanOrEqual(
@@ -404,6 +413,56 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       expect(ErrorBody.parse(limited.body).error.code).toBe('RATE_LIMITED');
       // Other shoppers are unaffected.
       await api.get('/search?pageSize=1').expect(200);
+    });
+
+    describe("the storefront server's reads (SSR for many shoppers from one IP)", () => {
+      const key = must(process.env.STOREFRONT_API_KEY, 'STOREFRONT_API_KEY');
+      const fromServer = (path: string, ip: string, sentKey: string = key) =>
+        api.raw().get(`/v1${path}`).set('X-Forwarded-For', ip).set(STOREFRONT_KEY_HEADER, sentKey);
+
+      it('uses the header the SDK sends', () => {
+        expect(SDK_STOREFRONT_KEY_HEADER).toBe(STOREFRONT_KEY_HEADER);
+      });
+
+      it('are not throttled as one client', async () => {
+        const serverIp = nextIp();
+        // 70 shoppers' listing pages, each a different URL, through one storefront server.
+        for (let page = 1; page <= 70; page++) {
+          const res = await fromServer(`/search?pageSize=1&page=${page}`, serverIp).expect(200);
+          expect(res.headers['x-ratelimit-remaining']).toBeUndefined();
+        }
+        // The storefront server's other public reads are not counted either.
+        const product = await fromServer('/products/velvet-matte-lipstick', serverIp).expect(200);
+        expect(product.headers['x-ratelimit-remaining']).toBeUndefined();
+        // The same IP without the key is an ordinary client with a fresh allowance.
+        const plain = await api.get('/search?pageSize=1', undefined, serverIp).expect(200);
+        expect(plain.headers['x-ratelimit-remaining']).toBe('59');
+      });
+
+      it('still counts a wrong key, writes and signed-in routes per IP', async () => {
+        const ip = nextIp();
+        const wrong = await fromServer('/search?pageSize=1', ip, `${key}x`).expect(200);
+        expect(wrong.headers['x-ratelimit-remaining']).toBe('59');
+        const signedIn = await fromServer('/me', ip).expect(401);
+        expect(signedIn.headers['x-ratelimit-remaining']).toBeDefined();
+        for (let i = 0; i < 5; i++) {
+          await api
+            .raw()
+            .post('/v1/auth/register')
+            .set('X-Forwarded-For', ip)
+            .set(STOREFRONT_KEY_HEADER, key)
+            .send({})
+            .expect(400);
+        }
+        const limited = await api
+          .raw()
+          .post('/v1/auth/register')
+          .set('X-Forwarded-For', ip)
+          .set(STOREFRONT_KEY_HEADER, key)
+          .send({})
+          .expect(429);
+        expect(ErrorBody.parse(limited.body).error.code).toBe('RATE_LIMITED');
+      });
     });
   });
 
@@ -751,10 +810,17 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
     });
 
     it('rejects the same bad queries alike', async () => {
+      // Each query type-checks as the other; both endpoints are strict, so the extra field is a 400.
+      const carouselQuery: ProductQuery = { category: 'lips', limit: 12 };
+      const listingQuery: SearchQuery = { category: 'lips', page: 2 };
       for (const call of [
         (a: HbApi) => a.search({ page: 0 }),
         (a: HbApi) => a.search({ pageSize: 49 }),
+        (a: HbApi) => a.search(carouselQuery),
+        (a: HbApi) => a.search({ ids: ['prd-1'] } as ProductQuery),
         (a: HbApi) => a.getProducts({ limit: 101 }),
+        (a: HbApi) => a.getProducts(listingQuery),
+        (a: HbApi) => a.getProducts({ pageSize: 10 } as SearchQuery),
         (a: HbApi) => a.getDeliveryEstimate('velvet-matte-lipstick', 'Dubai' as PkCity),
       ]) {
         for (const adapter of [mockApi, http]) {
@@ -766,6 +832,18 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
           expect(error).toMatchObject({ status: 400, code: 'VALIDATION_FAILED' });
         }
       }
+    });
+
+    it('accepts the same queries with empty fields alike (they never reach the query string)', async () => {
+      const empty = { category: 'lips', q: '', limit: undefined, page: undefined };
+      const [fromMock, fromHttp] = await Promise.all([mockApi.search(empty), http.search(empty)]);
+      expect(fromHttp.total).toBe(6);
+      expect(fromMock.total).toBe(fromHttp.total);
+      const [mockList, httpList] = await Promise.all([
+        mockApi.getProducts(empty),
+        http.getProducts(empty),
+      ]);
+      expect(slugs(httpList.items)).toEqual(slugs(mockList.items));
     });
 
     it('estimates delivery alike for every product, and from every store to every city', async () => {

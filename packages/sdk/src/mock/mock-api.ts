@@ -1,5 +1,5 @@
 import { featuredReviewLimit, type HbApi } from '../api';
-import { ApiRequestError } from '../http/http-api';
+import { ApiRequestError, sentFields } from '../http/http-api';
 import {
   estimateDelivery,
   PkCity,
@@ -54,6 +54,10 @@ function validate<T>(schema: Schema<T>, input: unknown): T {
   return result.data;
 }
 
+// Strict, as the controller parses them: a field the endpoint does not take is a 400, not dropped.
+const StrictProductQuery = ProductQuery.strict();
+const StrictSearchQuery = SearchQuery.strict();
+
 /** In-memory implementation of HbApi. Async to match the real HTTP client. */
 export const mockApi: HbApi = {
   async getCategories() {
@@ -69,7 +73,7 @@ export const mockApi: HbApi = {
     return brands.find((b) => b.slug === slug) ?? null;
   },
   async getProducts(query = {}) {
-    const q = validate(ProductQuery, query);
+    const q = validate(StrictProductQuery, sentFields(query));
     const limit = q.limit ?? DEFAULT_LIMIT;
     const start = q.cursor ? Number.parseInt(q.cursor, 10) || 0 : 0;
     const list = selectProducts(catalogue, q, ctx);
@@ -77,7 +81,7 @@ export const mockApi: HbApi = {
     return { items: list.slice(start, start + limit).map(toProductCard), nextCursor: next };
   },
   async search(query = {}) {
-    return runSearch(catalogue, validate(SearchQuery, query), ctx);
+    return runSearch(catalogue, validate(StrictSearchQuery, sentFields(query)), ctx);
   },
   async getProduct(slug) {
     return catalogue.find((p) => p.slug === slug) ?? null;

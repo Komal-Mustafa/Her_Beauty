@@ -13,6 +13,7 @@ import {
   type SearchQuery,
   type SearchResult,
 } from './catalog';
+import { discountPercent } from './money';
 
 /*
  * Shared catalogue logic (docs/p5-catalog.md §4). Pure: the mock adapter and the API both run
@@ -212,11 +213,8 @@ export function shadeFamily(hex: string): ShadeFamily {
 
 // ---------- money ----------
 
-/** Whole percent off, rounded down; 0 when there is no higher compare-at price. */
-export function discountPercent(price: number, compareAt: number | null): number {
-  if (compareAt === null || compareAt <= price) return 0;
-  return Math.floor(((compareAt - price) * 100) / compareAt);
-}
+// The discount rule lives in ./money (no zod) so the sale badge can import it on its own.
+export { discountPercent };
 
 /** On sale = the compare-at price is above the price. */
 export function isOnSale(p: Pick<ProductCard, 'price' | 'compareAtPrice'>): boolean {

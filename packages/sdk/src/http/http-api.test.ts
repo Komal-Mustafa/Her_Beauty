@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ApiRequestError } from './http-api';
-import { createHttpApi } from './http-api';
+import { createHttpApi, sentFields } from './http-api';
 
 function fakeFetch(status: number, body: unknown) {
   return vi.fn(async (_url: string) => new Response(JSON.stringify(body), { status }));
@@ -82,6 +82,32 @@ describe('createHttpApi', () => {
       'limit=7',
       'limit=12',
     ]);
+  });
+
+  it('sends the configured headers with every request', async () => {
+    const f = fakeFetch(200, []);
+    const api = createHttpApi({
+      baseUrl: 'http://api.test/v1',
+      fetch: f,
+      headers: { 'x-hb-storefront-key': 'k' },
+    });
+    await api.getCategories();
+    await api.search({ q: 'kohl' });
+    for (const [, init] of f.mock.calls as unknown as [string, RequestInit][]) {
+      expect(init.headers).toEqual({ 'x-hb-storefront-key': 'k', accept: 'application/json' });
+    }
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves empty fields off the query string', async () => {
+    const f = fakeFetch(200, {});
+    const api = createHttpApi({ baseUrl: 'http://api.test/v1', fetch: f });
+    await api.search({ q: '', category: 'lips', brand: undefined, page: 2 });
+    expect(f).toHaveBeenCalledWith(
+      'http://api.test/v1/search?category=lips&page=2',
+      expect.anything(),
+    );
+    expect(sentFields({ q: '', category: 'lips', sort: undefined })).toEqual({ category: 'lips' });
   });
 
   it('surfaces the API error code on failures', async () => {

@@ -64,7 +64,9 @@ SEED_DEMO_PASSWORD='choose-one' SEED_ADMIN_EMAIL=you@example.com pnpm --filter @
 | Admin (`/login`) | the `SEED_ADMIN_EMAIL` account; the first sign-in sets up two-step verification |
 
 Behind a proxy or CDN, set `TRUSTED_PROXY_HOPS` / `CLIENT_IP_HEADER` on the Next apps and
-`TRUST_PROXY` on the API so rate limits see the visitor's real IP (see `.env.example`).
+`TRUST_PROXY` on the API so rate limits see the visitor's real IP (see `.env.example`). With
+`NEXT_PUBLIC_API_MODE=http`, set the same `STOREFRONT_API_KEY` on the web app and the API, so the
+shop's server-side catalogue reads are not rate-limited as one visitor.
 
 Checks (same as CI): `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
 

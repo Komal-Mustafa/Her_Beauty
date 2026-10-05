@@ -304,7 +304,7 @@ export const brands: Brand[] = [
   },
 ];
 
-// ---------- shades (each is pinned to its family in shade-families.test.ts) ----------
+// ---------- shades (each is pinned to its family in fixtures.test.ts) ----------
 
 type Shade = { name: string; hex: string };
 const shade = (name: string, hex: string): Shade => ({ name, hex });

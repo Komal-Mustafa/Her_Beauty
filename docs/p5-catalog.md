@@ -200,7 +200,11 @@ return the same data for the same fixtures (existing parity rule).
 
 Interim note: search and facets run in memory over at most `MAX_SCAN` (2000) live products until
 Meilisearch (02-trd §2) replaces it behind the same endpoint and types. Rate limit per
-security.md: search 60/min per IP (use the existing throttler).
+security.md: search 60/min per IP (use the existing throttler). The storefront renders every
+shopper's listing pages from its own server, one IP, so that server sends `STOREFRONT_API_KEY`
+(header `x-hb-storefront-key`, server-only, set by `getApi`) and the API does not count its public
+GETs per IP; shoppers are limited at the edge (security.md §11). Writes and signed-in routes always
+count.
 
 ## 4. Shared catalogue logic (`packages/types/src/search.ts`, pure, unit-tested)
 
@@ -220,7 +224,9 @@ Both the mock adapter and the API call these, so the two stay identical.
    the family a person would name (Berry Kiss → berry, Nude Silk → nude, Rose Petal → pink, Coral
    Bloom → coral, Mauve → mauve, gold highlighter → gold, …). Each family has a display hex for
    swatches (`SHADE_FAMILY_HEX`) and a label (`SHADE_FAMILY_LABEL`).
-4. **`discountPercent(price, compareAt)`**: integer percent, floor, 0 when not on sale.
+4. **`discountPercent(price, compareAt)`**: integer percent, floor, 0 when not on sale. The "-n%"
+   price badge uses the same rule (`@hb/types/money`; no badge under 1%), so a list sorted by
+   discount never shows a bigger badge below a smaller one.
 5. **`filterProducts(products, query, ctx)`** applies every `ProductQuery` filter.
    **`sortProducts(list, sort, scores?)`**: relevance = score desc (stable), newest = `isNew`
    first then input order (the API feeds rows newest first), price asc/desc, rating desc then
@@ -243,7 +249,7 @@ Breadcrumbs: Home › Lips › Velvet Matte Lipstick
 │ Gallery                                  │ Buy box (sticky top-24)       │
 │ [Images | Video | 3D] tabs               │ Brand eyebrow (→ /brand)      │
 │ main 4:5 image, thumbnails               │ H1 title · rating (→ #reviews)│
-│                                          │ Price · was · -16%            │
+│                                          │ Price · was · -15%            │
 │                                          │ Shade picker · stock note     │
 │                                          │ Qty −/+ · Add to cart · ♡     │
 │                                          │ Delivery to [city ▾]: 2–4 days│

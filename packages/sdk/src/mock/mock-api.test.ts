@@ -11,7 +11,10 @@ import {
   shadeFamily,
   StorefrontStats,
   type PkCity,
+  type ProductQuery,
+  type SearchQuery,
 } from '@hb/types';
+import { discountPercent as badgePercent } from '../format';
 import { ApiRequestError } from '../http/http-api';
 import { products, reviews, sponsoredProductSlugs } from './fixtures';
 import { mockApi } from './mock-api';
@@ -91,6 +94,18 @@ describe('mockApi.getProducts', () => {
       status: 400,
       code: 'VALIDATION_FAILED',
     } satisfies Partial<ApiRequestError>);
+  });
+
+  it('rejects search-only fields like the API, but not fields left empty', async () => {
+    // A SearchQuery type-checks as a ProductQuery; the API still answers 400 for `page`.
+    const fromListing: SearchQuery = { category: 'lips', page: 2 };
+    await expect(mockApi.getProducts(fromListing)).rejects.toMatchObject({
+      status: 400,
+      code: 'VALIDATION_FAILED',
+    } satisfies Partial<ApiRequestError>);
+    // Empty values never reach the API's query string, so they are not unknown fields.
+    const empty = { category: 'lips', page: undefined } as ProductQuery;
+    expect((await mockApi.getProducts(empty)).items).toHaveLength(6);
   });
 });
 
@@ -204,6 +219,34 @@ describe('mockApi.search', () => {
     for (const bad of [{ page: 0 }, { pageSize: 49 }, { sort: 'bogus' }, { shade: ['green'] }]) {
       await expect(mockApi.search(bad as never)).rejects.toBeInstanceOf(ApiRequestError);
     }
+  });
+
+  it('rejects carousel-only fields like the API (unknown fields are not dropped)', async () => {
+    // A ProductQuery type-checks as a SearchQuery; the API still answers 400 for these.
+    const carousels: ProductQuery[] = [
+      { category: 'lips', limit: 12 },
+      { cursor: '24' },
+      { ids: ['prd-1'] },
+    ];
+    for (const carousel of carousels) {
+      await expect(mockApi.search(carousel)).rejects.toMatchObject({
+        status: 400,
+        code: 'VALIDATION_FAILED',
+      } satisfies Partial<ApiRequestError>);
+    }
+    const empty: ProductQuery = { category: 'lips', limit: undefined, q: '' };
+    expect((await mockApi.search(empty)).total).toBe(6);
+  });
+
+  it('never shows a bigger sale badge below a smaller one when sorted by discount', async () => {
+    const { items } = await mockApi.search({ onSale: true, sort: 'discount', pageSize: 48 });
+    expect(items).toHaveLength(products.filter(isOnSale).length);
+    const badges = items.map((p) => badgePercent(p.price, p.compareAtPrice));
+    expect(badges.every((n) => n !== null)).toBe(true);
+    expect(badges).toEqual([...badges].sort((a, b) => (b ?? 0) - (a ?? 0)));
+    const carousel = await mockApi.getProducts({ onSale: true, sort: 'discount', limit: 100 });
+    const carouselBadges = carousel.items.map((p) => badgePercent(p.price, p.compareAtPrice) ?? 0);
+    expect(carouselBadges).toEqual([...carouselBadges].sort((a, b) => b - a));
   });
 });
 

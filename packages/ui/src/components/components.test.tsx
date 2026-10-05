@@ -10,10 +10,10 @@ import { Stepper } from './stepper';
 afterEach(cleanup);
 
 describe('Price', () => {
-  it('formats paisa and shows the discount', () => {
+  it('formats paisa and shows the discount, rounded down like the discount sort', () => {
     render(<Price amount={185000} compareAt={220000} />);
     expect(screen.getByText('Rs 1,850')).toBeTruthy();
-    expect(screen.getByText('−16%')).toBeTruthy();
+    expect(screen.getByText('−15%')).toBeTruthy(); // 15.9 %
   });
 });
 
