@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SHADE_FAMILY_HEX } from '@hb/types';
 import { ActiveFilters } from './active-filters';
+import { swatchMarkClass } from './filter-group';
 import { FilterPanel } from './filter-panel';
 import { SortSelect } from './sort-select';
 import { params, renderListing } from './test-listing';
 
 const push = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, prefetch: vi.fn() }) }));
 
 beforeEach(() => push.mockClear());
 afterEach(cleanup);
@@ -43,6 +45,27 @@ describe('FilterPanel', () => {
     expect(red.closest('label')?.textContent).toContain('Red');
     fireEvent.click(red);
     expect(pushed()).toBe('/category/lips?brand=glow&shade=red&sort=newest');
+  });
+
+  it('marks a ticked swatch in ink on light families and in white on dark ones (3:1)', () => {
+    // White has under 3:1 on gold (2.1) and nude (2.8); ink-900 has 7.8 and 5.8 there.
+    const marks = Object.fromEntries(
+      Object.entries(SHADE_FAMILY_HEX).map(([family, hex]) => [family, swatchMarkClass(hex)]),
+    );
+    expect(marks).toEqual({
+      nude: 'text-ink-900',
+      pink: 'text-ink-900',
+      red: 'text-white',
+      berry: 'text-white',
+      coral: 'text-ink-900',
+      mauve: 'text-ink-900',
+      brown: 'text-white',
+      gold: 'text-ink-900',
+    });
+    renderListing(<FilterPanel idPrefix="t" />, { params: params({ shade: ['nude', 'red'] }) });
+    const mark = (name: RegExp) => box(name).closest('label')?.querySelector('svg');
+    expect(mark(/^Nude, 5 products$/)?.getAttribute('class')).toContain('text-ink-900');
+    expect(mark(/^Red, 3 products$/)?.getAttribute('class')).toContain('text-white');
   });
 
   it('picks a rating with a radio, and "Any rating" removes it', () => {

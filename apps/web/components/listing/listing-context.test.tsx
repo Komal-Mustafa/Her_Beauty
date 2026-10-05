@@ -1,15 +1,22 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { use, useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_LISTING, type ListingParams } from '@/lib/listing-url';
+import { ActiveFilters, ClearFiltersButton } from './active-filters';
 import { FilterPanel } from './filter-panel';
+import { SORT_SELECT_ID } from './ids';
 import { ListingProvider } from './listing-context';
+import { SortSelect } from './sort-select';
 import { FACETS, params } from './test-listing';
 
-const push = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+const router = vi.hoisted(() => ({ push: vi.fn(), prefetch: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
-beforeEach(() => push.mockClear());
+beforeEach(() => {
+  router.push.mockReset();
+  router.prefetch.mockReset();
+});
 afterEach(cleanup);
 
 /** A category listing as the server renders it: these params, this many results. */
@@ -58,5 +65,109 @@ describe('ListingProvider live region', () => {
       view.rerender(<Listing params={params({ brand: ['glow'], page: 2 })} total={30} />);
     });
     expect(status()).toBe('');
+  });
+});
+
+describe('ListingProvider navigation', () => {
+  it('prefetches the exact URL, then pushes it without scrolling', async () => {
+    render(<Listing params={params({ sort: 'newest' })} total={6} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('checkbox', { name: /^Glow, 4 products$/ }));
+    });
+    // The exact-URL prefetch keeps Next 15.5 from reusing the page's param-less entry, which
+    // ignores `scroll: false` and jumps to the top.
+    expect(router.prefetch).toHaveBeenCalledWith('/category/lips?brand=glow&sort=newest');
+    expect(router.push).toHaveBeenCalledWith('/category/lips?brand=glow&sort=newest', {
+      scroll: false,
+    });
+    expect(router.prefetch.mock.invocationCallOrder[0]).toBeLessThan(
+      router.push.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+});
+
+/**
+ * The router as Next drives it: a push renders the new route in the transition, which waits
+ * (stays pending) until the server answers.
+ */
+let navigate: ((answer: Promise<void>) => void) | undefined;
+function Route() {
+  const [answer, setAnswer] = useState<Promise<void>>();
+  useEffect(() => {
+    navigate = setAnswer;
+  }, []);
+  if (answer) use(answer);
+  return null;
+}
+
+/** The toolbar and the results: the empty state's Clear filters when nothing matches. */
+function Page({ params: p, total }: { params: ListingParams; total: number }) {
+  return (
+    <ListingProvider kind="category" path="/category/lips" params={p} facets={FACETS} total={total}>
+      <SortSelect id={SORT_SELECT_ID} />
+      <ActiveFilters />
+      {total === 0 ? <ClearFiltersButton /> : <p>Results</p>}
+      <Route />
+    </ListingProvider>
+  );
+}
+
+const link = (name: string) => screen.getByRole('link', { name });
+
+/** Activates a link from the keyboard's point of view: focused, then followed. */
+async function follow(name: string) {
+  const target = link(name);
+  target.focus();
+  await act(async () => fireEvent.click(target));
+  return target;
+}
+
+describe('ListingProvider focus after a change', () => {
+  it('a removed chip hands focus to the chip that takes its place', async () => {
+    const view = render(
+      <Page params={params({ brand: ['glow', 'velvet'], sale: true })} total={6} />,
+    );
+    await follow('Remove filter Brand: Glow');
+    expect(document.activeElement).toBe(link('Remove filter Brand: Velvet'));
+    await act(async () =>
+      view.rerender(<Page params={params({ brand: ['velvet'], sale: true })} total={3} />),
+    );
+    expect(document.activeElement).toBe(link('Remove filter Brand: Velvet'));
+  });
+
+  it('the last chip hands focus to the one before it', async () => {
+    render(<Page params={params({ brand: ['glow'], sale: true })} total={6} />);
+    await follow('Remove filter On sale');
+    expect(document.activeElement).toBe(link('Remove filter Brand: Glow'));
+  });
+
+  it('Clear all, with no chip left, hands focus to Sort', async () => {
+    render(<Page params={params({ brand: ['glow'], sale: true })} total={6} />);
+    await follow('Clear all filters');
+    expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Sort by' }));
+  });
+
+  it("the empty state's Clear filters hands focus to Sort once the results replace it", async () => {
+    let answer = () => {};
+    router.push.mockImplementation(() =>
+      navigate?.(new Promise<void>((resolve) => (answer = resolve))),
+    );
+    const view = render(<Page params={params({ brand: ['glow'] })} total={0} />);
+    const clear = await follow('Clear filters');
+    // Loading: the link is still there and keeps focus.
+    expect(document.activeElement).toBe(clear);
+    await act(async () => {
+      view.rerender(<Page params={params()} total={6} />);
+      answer();
+    });
+    expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Sort by' }));
+  });
+
+  it('leaves focus alone when the control stays', async () => {
+    render(<Page params={params({ brand: ['glow'] })} total={6} />);
+    const sort = screen.getByRole('combobox', { name: 'Sort by' });
+    sort.focus();
+    await act(async () => fireEvent.change(sort, { target: { value: 'newest' } }));
+    expect(document.activeElement).toBe(sort);
   });
 });

@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useOptimistic,
   useRef,
@@ -29,9 +30,15 @@ type ListingState = {
   pending: boolean;
   /** The result count to read out after a change ("6 products"), or empty. */
   announcement: string;
-  /** Applies new filters at once: a history entry, no scroll jump. */
-  apply: (next: ListingParams) => void;
+  /**
+   * Applies new filters at once: a history entry, no scroll jump. `refocus` names where focus goes
+   * when the control that made the change goes away with it (a removed chip, Clear all).
+   */
+  apply: (next: ListingParams, refocus?: Refocus) => void;
 };
+
+/** The element to focus once the control that applied a change is gone (null: none). */
+export type Refocus = () => HTMLElement | null | undefined;
 
 const ListingContext = createContext<ListingState | null>(null);
 
@@ -70,22 +77,45 @@ export function ListingProvider({
   const [optimistic, setOptimistic] = useOptimistic(params);
   const [announcement, setAnnouncement] = useState('');
   const changed = useRef(false);
+  const refocus = useRef<Refocus | null>(null);
   // The filters and sort the count was last read out for (the page number does not change it).
   const shownKey = listingHref(path, { ...params, page: 1 });
   const announcedKey = useRef(shownKey);
 
   const apply = useCallback(
-    (next: ListingParams) => {
+    (next: ListingParams, then?: Refocus) => {
       changed.current = true;
+      refocus.current = then ?? null;
       // Emptied first, so the same count is announced again after the change.
       setAnnouncement('');
+      const href = listingHref(path, next);
       startTransition(() => {
         setOptimistic(next);
-        router.push(listingHref(path, next), { scroll: false });
+        // Next 15.5 serves a same-path URL with other search params from the page's own
+        // param-less prefetch entry ("aliased"), and that path drops `scroll: false`: the window
+        // jumped to the top on every change. Prefetching this exact URL first gives the push an
+        // entry of its own, so the option holds; the push reuses that request, it sends no other.
+        router.prefetch(href);
+        router.push(href, { scroll: false });
       });
     },
     [path, router, setOptimistic],
   );
+
+  // A control that removes itself (a chip, Clear all) leaves focus on the page's body: it goes to
+  // `refocus` instead once that control is gone (WCAG 2.4.3). The empty state's Clear filters only
+  // goes when the new results show, so the request waits for the change to land, no longer.
+  useLayoutEffect(() => {
+    const target = refocus.current;
+    if (!target) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) {
+      if (!pending) refocus.current = null;
+      return;
+    }
+    refocus.current = null;
+    target()?.focus();
+  });
 
   // Back and Forward change the filters without `apply`: the old count goes at once, the new one
   // is read out when its results show (below).

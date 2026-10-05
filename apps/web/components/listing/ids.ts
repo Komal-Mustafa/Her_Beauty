@@ -4,3 +4,6 @@
  * Filters button is hidden at that width.
  */
 export const FILTERS_HEADING_ID = 'filters-title';
+
+/** The listing's "Sort by" select. It takes focus when the filter chips are cleared away. */
+export const SORT_SELECT_ID = 'listing-sort';
