@@ -109,7 +109,7 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
           />
         </div>
       </div>
-      <div className="mt-3 flex min-h-11 flex-wrap items-start gap-x-3">
+      <div className="mt-3 flex min-h-10 flex-wrap items-start gap-x-3">
         <p id={`${id}-result`} role="status" className="text-sm leading-5 text-ink-500">
           {line}
         </p>

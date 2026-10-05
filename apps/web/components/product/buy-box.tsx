@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { useProduct } from './product-context';
 import { QuantityStepper } from './quantity-stepper';
 import { SizePills } from './size-pills';
-import { maxQuantity, stockNote } from './variant-selection';
+import { fixedSize, maxQuantity, soldOut, stockNote } from './variant-selection';
 import { WishlistButton } from './wishlist-button';
 
 /** A shade without a hex still gets a neutral swatch (a theme colour, not a raw hex). */
@@ -22,6 +22,7 @@ export function BuyBox({ children }: { children?: ReactNode }) {
   const { product, kind, variant, selectVariant, qty, setQty, add, mainAddRef } = useProduct();
   const outOfStock = variant.stock <= 0;
   const note = stockNote(variant.stock);
+  const size = fixedSize(variant, kind);
 
   const shades: Shade[] = product.variants
     .filter((v) => v.shadeName)
@@ -68,12 +69,20 @@ export function BuyBox({ children }: { children?: ReactNode }) {
         </a>
       </div>
 
-      <Price
-        amount={variant.price}
-        compareAt={variant.compareAtPrice}
-        currency={variant.currency}
-        size="lg"
-      />
+      <div className="flex flex-col items-start gap-1">
+        <Price
+          amount={variant.price}
+          compareAt={variant.compareAtPrice}
+          currency={variant.currency}
+          size="lg"
+        />
+        {/* One pack size for every variant: no pills, but the shopper still sees what she buys. */}
+        {size ? (
+          <p className="text-sm text-ink-500">
+            Size: <span className="text-ink-900">{size}</span>
+          </p>
+        ) : null}
+      </div>
 
       {picker || note ? (
         <div>
@@ -89,7 +98,10 @@ export function BuyBox({ children }: { children?: ReactNode }) {
         </div>
       ) : null}
 
-      <QuantityStepper value={qty} max={maxQuantity(variant.stock)} onChange={setQty} />
+      {/* Nothing to count when no variant can be bought; a sold-out shade keeps it (disabled). */}
+      {soldOut(product) ? null : (
+        <QuantityStepper value={qty} max={maxQuantity(variant.stock)} onChange={setQty} />
+      )}
 
       {outOfStock ? (
         <div className="grid gap-3">

@@ -53,6 +53,19 @@ export function initialVariant(product: Product, shadeParam?: string | string[])
   return fromUrl ?? product.variants.find((v) => v.stock > 0) ?? product.variants[0]!;
 }
 
+/**
+ * The pack size the buy box shows under the price when the variants do not differ by size (one
+ * "10 ml" serum, every shade of a lipstick "3.5 g"); null without one, or when size pills show it.
+ */
+export function fixedSize(variant: Variant, kind: OptionKind): string | null {
+  return kind === 'size' ? null : variant.sizeLabel || null;
+}
+
+/** No variant is in stock: nothing can be added whichever is chosen. */
+export function soldOut(product: Pick<Product, 'variants'>): boolean {
+  return product.variants.every((v) => v.stock <= 0);
+}
+
 /** What the variant is called in the buy box, cart and toasts ("Berry Kiss", "50 ml"). */
 export function variantLabel(variant: Variant, kind: OptionKind): string | null {
   if (kind === 'shade') return variant.shadeName;

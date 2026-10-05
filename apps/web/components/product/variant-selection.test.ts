@@ -5,11 +5,13 @@ import {
   addableQuantity,
   cartTitle,
   clampQuantity,
+  fixedSize,
   initialVariant,
   MAX_QTY_PER_ITEM,
   maxQuantity,
   optionKind,
   shadeSlug,
+  soldOut,
   stockNote,
   variantByShadeSlug,
 } from './variant-selection';
@@ -95,7 +97,25 @@ describe('cartTitle', () => {
   });
 });
 
+describe('fixedSize', () => {
+  it('shows one pack size under the price, unless size pills show it', () => {
+    const oil = lipOil();
+    const sized = { ...oil.variants[0]!, sizeLabel: '6 ml' };
+    expect(fixedSize(sized, 'none')).toBe('6 ml');
+    expect(fixedSize({ ...sized, sizeLabel: '3.5 g' }, 'shade')).toBe('3.5 g');
+    expect(fixedSize(perfume().variants[0]!, 'size')).toBeNull();
+    expect(fixedSize(oil.variants[0]!, 'none')).toBeNull();
+    expect(fixedSize({ ...sized, sizeLabel: '' }, 'none')).toBeNull();
+  });
+});
+
 describe('stock and quantity', () => {
+  it('is sold out only when no variant is in stock', () => {
+    const lip = lipstick();
+    expect(soldOut(lip)).toBe(false);
+    expect(soldOut({ variants: lip.variants.map((v) => ({ ...v, stock: 0 })) })).toBe(true);
+  });
+
   it('says "Only n left" at five or fewer and "Out of stock" at none', () => {
     expect(stockNote(25)).toBeNull();
     expect(stockNote(6)).toBeNull();
