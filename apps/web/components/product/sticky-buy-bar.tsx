@@ -9,15 +9,15 @@ import { variantLabel } from './variant-selection';
 const FAR_BELOW = 100_000;
 
 /**
- * Sticky buy bar below 1024 px (docs/p5-catalog.md §5): slides up once the buy box's Add to cart
- * has scrolled away above the viewport, and back down when it returns. From 1024 px the buy box
- * itself is sticky, so the bar is not displayed.
+ * Sticky buy bar below 1024 px (docs/p5-catalog.md §5): fixed to the bottom of the window, it slides
+ * up once the buy box's Add to cart has scrolled away above the viewport, and back down when it
+ * returns. From 1024 px the buy box itself is sticky, so the bar is not displayed.
  *
- * It is `position: sticky` at the very end of the page's main content, not `fixed`: its box keeps
- * its own space there, so the last content and the footer can always scroll clear of it. Shown, it
- * reserves its height at the bottom of the window for focus scrolling (`scroll-padding-bottom`) and
- * for the toasts (`--toast-offset`), so neither a focused control nor a toast ends up behind it
- * (docs/p5-catalog.md §9). Hidden, it is `inert` (no focus, not announced).
+ * Shown, it reserves its height at the bottom of the window: as bottom padding on the page (so the
+ * footer and the last content can always scroll clear of it), for focus scrolling
+ * (`scroll-padding-bottom`) and for the toasts (`--toast-offset`), so no content, focused control
+ * or toast ends up behind it (docs/p5-catalog.md §9). Being fixed, it is always where those values
+ * say. Hidden, it is `inert` (no focus, not announced) and lets taps through to the page under it.
  */
 export function StickyBuyBar() {
   const { product, kind, variant, add, mainAddRef } = useProduct();
@@ -47,9 +47,11 @@ export function StickyBuyBar() {
     const el = barRef.current;
     if (!shown || !el) return;
     const root = document.documentElement;
+    const page = document.body;
     const release = () => {
       root.style.removeProperty('scroll-padding-bottom');
       root.style.removeProperty('--toast-offset');
+      page.style.removeProperty('padding-bottom');
     };
     const reserve = () => {
       // 0 from 1024 px, where the bar is not displayed.
@@ -60,6 +62,7 @@ export function StickyBuyBar() {
       }
       root.style.setProperty('scroll-padding-bottom', `calc(${height}px + 1rem)`);
       root.style.setProperty('--toast-offset', `${height}px`);
+      page.style.setProperty('padding-bottom', `${height}px`);
     };
     reserve();
     // The height changes with the window (the bar's text, safe area) and to 0 at 1024 px.
@@ -74,13 +77,21 @@ export function StickyBuyBar() {
   const label = variantLabel(variant, kind);
 
   return (
-    <div ref={barRef} className="sticky bottom-0 z-30 md:hidden">
+    // The wrapper never takes taps (its box stays at the bottom of the window even while the bar
+    // is hidden); the panel does, only while it is shown.
+    <div
+      ref={barRef}
+      data-sticky-buy-bar=""
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-30 md:hidden"
+    >
       <div
         inert={!shown}
         className={cn(
           'border-t border-ink-200 bg-white/95 shadow-lift backdrop-blur transition duration-slow ease-soft',
           'px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3',
-          shown ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0',
+          shown
+            ? 'pointer-events-auto translate-y-0 opacity-100'
+            : 'pointer-events-none translate-y-full opacity-0',
           'motion-reduce:translate-y-0',
         )}
       >

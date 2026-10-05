@@ -38,7 +38,7 @@ async function renderBuyBox(product: Product = lipstick(), shade?: string) {
 }
 
 const box = () => within(screen.getByRole('region', { name: 'Buy box' }));
-const bar = () => document.querySelector<HTMLElement>('.sticky > div')!;
+const bar = () => document.querySelector<HTMLElement>('[data-sticky-buy-bar] > div')!;
 const input = () => box().getByLabelText('Quantity') as HTMLInputElement;
 const toast = () => screen.getByRole('status');
 const storedCart = (): CartLine[] =>
@@ -381,24 +381,44 @@ describe('StickyBuyBar', () => {
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
       this: HTMLElement,
     ) {
-      return this.classList.contains('sticky') ? 72 : 0;
+      return this.hasAttribute('data-sticky-buy-bar') ? 72 : 0;
     });
     const html = document.documentElement.style;
+    const body = document.body.style;
     await renderBuyBox();
     expect(html.getPropertyValue('--toast-offset')).toBe('');
+    expect(body.getPropertyValue('padding-bottom')).toBe('');
 
     mainButtonIs('above');
     expect(html.getPropertyValue('--toast-offset')).toBe('72px');
     expect(html.getPropertyValue('scroll-padding-bottom')).toBe('calc(72px + 1rem)');
+    // The page can scroll its footer clear of the fixed bar.
+    expect(body.getPropertyValue('padding-bottom')).toBe('72px');
 
     mainButtonIs('visible');
     expect(html.getPropertyValue('--toast-offset')).toBe('');
     expect(html.getPropertyValue('scroll-padding-bottom')).toBe('');
+    expect(body.getPropertyValue('padding-bottom')).toBe('');
 
     mainButtonIs('above');
     cleanup();
     expect(html.getPropertyValue('--toast-offset')).toBe('');
     expect(html.getPropertyValue('scroll-padding-bottom')).toBe('');
+    expect(body.getPropertyValue('padding-bottom')).toBe('');
+  });
+
+  it('takes no taps while hidden: only the shown panel catches the pointer', async () => {
+    await renderBuyBox();
+    const wrapper = bar().parentElement!;
+    // Fixed to the bottom of the window, so its box is there even while the bar is hidden.
+    expect(wrapper.className).toContain('fixed');
+    expect(wrapper.className).toContain('pointer-events-none');
+    expect(bar().className).toContain('pointer-events-none');
+    expect(bar().className).not.toContain('pointer-events-auto');
+    mainButtonIs('above');
+    expect(bar().className).toContain('pointer-events-auto');
+    mainButtonIs('visible');
+    expect(bar().className).not.toContain('pointer-events-auto');
   });
 
   it('reserves nothing where the bar is not displayed (from 1024 px)', async () => {
@@ -407,6 +427,7 @@ describe('StickyBuyBar', () => {
     mainButtonIs('above');
     expect(document.documentElement.style.getPropertyValue('--toast-offset')).toBe('');
     expect(document.documentElement.style.getPropertyValue('scroll-padding-bottom')).toBe('');
+    expect(document.body.style.getPropertyValue('padding-bottom')).toBe('');
   });
 
   it('shows the shade and price and adds from its own button', async () => {
