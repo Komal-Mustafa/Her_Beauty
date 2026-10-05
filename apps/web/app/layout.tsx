@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { ToastProvider } from '@hb/ui';
 import { SmoothScroll } from '@/components/layout/smooth-scroll';
+import { websiteJsonLd } from '@/lib/seo/json-ld';
+import { JsonLd } from '@/lib/seo/json-ld-script';
 import { SITE } from '@/lib/site';
 import { fontVariables } from './fonts';
 import './globals.css';
@@ -25,6 +27,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={fontVariables}>
       <body className="min-h-dvh bg-white">
+        {/* The site and its search box for search engines (docs/p5-catalog.md §10). */}
+        <JsonLd data={websiteJsonLd()} />
         <ToastProvider>
           {children}
           <SmoothScroll />
