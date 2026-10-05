@@ -269,10 +269,15 @@ function PriceFilter({ idPrefix, params, range, onApply }: PriceFilterProps) {
 
 type SaleSwitchProps = { count: number; checked: boolean; onChange: (on: boolean) => void };
 
-/** "On sale only" switch: a checkbox with the switch role, the knob slides (transform). */
+/**
+ * "On sale only" switch: a checkbox with the switch role, the knob slides (transform). Off is an
+ * ink-500 outline and knob on white, on a pink-600 track with a white knob: the track and the knob
+ * have 3:1 in both states (WCAG 1.4.11). The label is positioned so the hidden checkbox sits in
+ * it, and focusing it scrolls the drawer to the switch.
+ */
 function SaleSwitch({ count, checked, onChange }: SaleSwitchProps) {
   return (
-    <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-btn px-2 transition-colors duration-fast hover:bg-blush-50">
+    <label className="relative flex min-h-11 cursor-pointer items-center gap-3 rounded-btn px-2 transition-colors duration-fast hover:bg-blush-50">
       <input
         type="checkbox"
         role="switch"
@@ -291,7 +296,7 @@ function SaleSwitch({ count, checked, onChange }: SaleSwitchProps) {
       <span className="sr-only">On sale only, {productCount(count)}</span>
       <span
         aria-hidden
-        className="relative h-6 w-11 shrink-0 rounded-pill bg-ink-200 transition-colors duration-base ease-soft peer-checked:bg-pink-600 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-pink-400 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-pill after:bg-white after:shadow-soft after:transition-transform after:duration-base after:ease-soft peer-checked:after:translate-x-5 motion-reduce:after:transition-none"
+        className="relative h-6 w-11 shrink-0 rounded-pill border-2 border-ink-500 bg-white transition-colors duration-base ease-soft peer-checked:border-pink-600 peer-checked:bg-pink-600 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-pink-400 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-pill after:bg-ink-500 after:transition after:duration-base after:ease-soft peer-checked:after:translate-x-5 peer-checked:after:bg-white peer-checked:after:shadow-soft motion-reduce:after:transition-none"
       />
     </label>
   );
