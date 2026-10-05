@@ -118,6 +118,11 @@ export function sortOptions(kind: ListingKind, q?: string): ProductSort[] {
   return SORT_ORDER.filter((s) => s !== 'relevance' || (kind === 'search' && Boolean(q)));
 }
 
+/** "1 product", "1,250 products". */
+export function productCount(n: number): string {
+  return `${n.toLocaleString('en-PK')} ${n === 1 ? 'product' : 'products'}`;
+}
+
 /** Whole rupees from the URL → paisa for the API (integers only, rules.md §1.2). */
 export function rupeesToPaisa(rupees: number): number {
   if (!Number.isSafeInteger(rupees) || rupees < 0) {
