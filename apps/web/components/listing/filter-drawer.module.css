@@ -1,0 +1,58 @@
+/*
+ * The filter drawer slides in from the left (docs/p5-catalog.md §2.1, §8): transform only,
+ * duration-slow (450 ms), ease-soft, and back out when it closes (Radix waits for the animation).
+ * The site's reduced-motion rule shortens every animation to 1 ms; this one also drops the
+ * movement and keeps a fade.
+ */
+.drawer[data-state='open'] {
+  animation: drawer-in 450ms var(--ease-soft, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.drawer[data-state='closed'] {
+  animation: drawer-out 450ms var(--ease-soft, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer[data-state='open'] {
+    animation-name: drawer-fade-in;
+  }
+  .drawer[data-state='closed'] {
+    animation-name: drawer-fade-out;
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawer-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes drawer-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
