@@ -108,23 +108,53 @@ function indexDoc(doc: SearchDoc): IndexedDoc {
   });
 }
 
-function wordMatch(term: string, word: string, prefixOk: boolean): number {
-  if (term === word) return MATCH_QUALITY.exact;
-  if (prefixOk && word.startsWith(term)) return MATCH_QUALITY.prefix;
-  const typos = allowedTypos(term.length);
-  return typos > 0 && damerauLevenshtein(term, word, typos) <= typos ? MATCH_QUALITY.typo : 0;
+/** A query word and how it may match. */
+type Term = {
+  text: string;
+  /** Prefix matching only for the word being typed (the last one), from 2 letters. */
+  prefix: boolean;
+  /** Typos it may have: `allowedTypos`, or 0 when a scanned product has it without typos. */
+  typos: number;
+};
+
+/** The match of a query word without typos (exact, or by prefix when allowed); 0 = none. */
+function cleanMatch(term: Term, word: string): number {
+  if (term.text === word) return MATCH_QUALITY.exact;
+  return term.prefix && word.startsWith(term.text) ? MATCH_QUALITY.prefix : 0;
+}
+
+function wordMatch(term: Term, word: string): number {
+  const clean = cleanMatch(term, word);
+  if (clean > 0 || term.typos === 0) return clean;
+  return damerauLevenshtein(term.text, word, term.typos) <= term.typos ? MATCH_QUALITY.typo : 0;
+}
+
+const hasCleanMatch = (term: Term, doc: IndexedDoc) =>
+  doc.some((field) => field.words.some((word) => cleanMatch(term, word) > 0));
+
+/**
+ * The query's words. A word may match with typos only when none of the `scanned` products has it
+ * exactly or by prefix: typos rescue a misspelt word ("lipstik" finds lipsticks) but never give
+ * a real one a second meaning ("blush" lists blushes, not brushes; "brush" brushes, not blushes).
+ */
+function queryTerms(words: readonly string[], scanned: readonly IndexedDoc[]): Term[] {
+  return words.map((text, i) => {
+    const term: Term = { text, prefix: i === words.length - 1 && text.length >= 2, typos: 0 };
+    const typos = allowedTypos(text.length);
+    return typos > 0 && !scanned.some((doc) => hasCleanMatch(term, doc))
+      ? { ...term, typos }
+      : term;
+  });
 }
 
 /** Every term must match some word (AND); the score adds each term's best weighted match. */
-function scoreTerms(terms: readonly string[], doc: IndexedDoc): number {
+function scoreTerms(terms: readonly Term[], doc: IndexedDoc): number {
   let score = 0;
-  for (const [i, term] of terms.entries()) {
-    // Prefix matching only for the word being typed (the last one), from 2 letters.
-    const prefixOk = i === terms.length - 1 && term.length >= 2;
+  for (const term of terms) {
     let best = 0;
     for (const field of doc) {
       for (const word of field.words) {
-        best = Math.max(best, wordMatch(term, word, prefixOk) * field.weight);
+        best = Math.max(best, wordMatch(term, word) * field.weight);
       }
     }
     if (best === 0) return 0;
@@ -135,13 +165,16 @@ function scoreTerms(terms: readonly string[], doc: IndexedDoc): number {
 
 /**
  * Relevance of a product to a search: every query word must match a word of the product exactly,
- * by prefix (the last query word, from 2 letters) or with typos (`allowedTypos`). The score is
- * the sum of each word's best match times its field weight (`SEARCH_FIELD_WEIGHTS`), exact
- * above prefix above typo. 0 = no match (also for a query without words).
+ * by prefix (the last query word, from 2 letters) or, when no scanned product (here: this one)
+ * has the word that way, with typos (`allowedTypos`). The score is the sum of each word's best
+ * match times its field weight (`SEARCH_FIELD_WEIGHTS`), exact above prefix above typo. 0 = no
+ * match (also for a query without words).
  */
 export function searchScore(query: string, doc: SearchDoc): number {
-  const terms = tokenize(query);
-  return terms.length ? scoreTerms(terms, indexDoc(doc)) : 0;
+  const words = tokenize(query);
+  if (!words.length) return 0;
+  const indexed = indexDoc(doc);
+  return scoreTerms(queryTerms(words, [indexed]), indexed);
 }
 
 // ---------- shade families ----------
@@ -262,32 +295,44 @@ function familyCache(): FamilyOf {
   };
 }
 
-/** The SearchDoc of a product: category name from the context, shade names from its variants. */
-export function searchDoc(p: Product, ctx: SearchContext): SearchDoc {
+/**
+ * The SearchDoc of a product: category name from the context; shade names from its variants plus
+ * their families' labels, so "red lipstick" finds a lipstick in Classic Red or in Crimson.
+ */
+export function searchDoc(
+  p: Product,
+  ctx: SearchContext,
+  family: FamilyOf = shadeFamily,
+): SearchDoc {
+  const families = new Set(p.shades.map((s) => SHADE_FAMILY_LABEL[family(s.hex)]));
   return {
     title: p.title,
     brand: p.brand.name,
     store: p.seller.storeName,
     category: ctx.categories.find((c) => c.id === p.categoryId)?.name ?? '',
     tags: p.tags,
-    shades: p.shades.map((s) => s.name),
+    shades: [...p.shades.map((s) => s.name), ...families],
   };
 }
+
+/**
+ * Which products decide whether a query word may match with typos (see `queryTerms`): `all` the
+ * scanned ones (search: its facets count products outside the filters and must not change as
+ * filters are ticked), or only those the other filters leave (`filtered`, getProducts: the API
+ * loads just those rows, so both adapters see the same products).
+ */
+type TypoScope = 'all' | 'filtered';
 
 function prepare(
   products: readonly Product[],
   query: ProductFilters,
   ctx: SearchContext,
+  scope: TypoScope = 'all',
 ): Prepared {
   const family = familyCache();
-  const terms = tokenize(query.q ?? '');
-  const scores = terms.length
-    ? new Map(products.map((p) => [p.id, scoreTerms(terms, indexDoc(searchDoc(p, ctx)))]))
-    : null;
   const checks: Check[] = [];
   const add = (group: FacetGroup | null, test: Check['test']) => checks.push({ group, test });
 
-  if (scores) add(null, (p) => (scores.get(p.id) ?? 0) > 0);
   if (query.category !== undefined) {
     const id = ctx.categories.find((c) => c.slug === query.category)?.id;
     add('category', (p) => id !== undefined && p.categoryId === id);
@@ -322,6 +367,18 @@ function prepare(
     const ids = new Set(query.ids);
     add(null, (p) => ids.has(p.id));
   }
+
+  const words = tokenize(query.q ?? '');
+  if (!words.length) return { checks, scores: null, family };
+  const docs = new Map(products.map((p) => [p.id, indexDoc(searchDoc(p, ctx, family))]));
+  const scanned =
+    scope === 'all' ? products : products.filter((p) => checks.every((c) => c.test(p)));
+  const terms = queryTerms(
+    words,
+    scanned.map((p) => docs.get(p.id) ?? []),
+  );
+  const scores = new Map(products.map((p) => [p.id, scoreTerms(terms, docs.get(p.id) ?? [])]));
+  checks.unshift({ group: null, test: (p) => (scores.get(p.id) ?? 0) > 0 });
   return { checks, scores, family };
 }
 
@@ -413,13 +470,16 @@ function ordered(
   return sort === 'relevance' ? pinSponsored(list) : list;
 }
 
-/** `getProducts`: filter, then order (see `ordered`), before the caller pages with its cursor. */
+/**
+ * `getProducts`: filter, then order (see `ordered`), before the caller pages with its cursor.
+ * Typos are judged against the products the other filters leave (`TypoScope`).
+ */
 export function selectProducts(
   products: readonly Product[],
   query: ProductFilters & { sort?: ProductSort },
   ctx: SearchContext,
 ): Product[] {
-  return ordered(products, query, prepare(products, query, ctx));
+  return ordered(products, query, prepare(products, query, ctx, 'filtered'));
 }
 
 const SKIN_TYPE_LABEL: Record<SkinType, string> = {
