@@ -3,6 +3,12 @@ import { cn } from '@hb/ui';
 import type { ReactNode } from 'react';
 import { sanitizeDescription } from '@/lib/sanitize';
 
+/**
+ * Measure for running text: about 70 characters of 16 px Inter (04 §3, line length 60–75). `ch` is
+ * the width of a "0", wider than an average letter, so 68ch gave 90-character lines.
+ */
+const MEASURE = 'max-w-[35rem]';
+
 // Formatting for the sanitized description (only the tags the sanitizer keeps can appear).
 const RICH_TEXT = cn(
   'text-ink-900 [&>*+*]:mt-4',
@@ -14,7 +20,11 @@ const RICH_TEXT = cn(
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id}>
-      <h2 id={id} className="mb-4 font-display text-2xl font-medium text-ink-900 md:text-[28px]">
+      {/* The H2 of 04 §3 (40 / 28), as the page's other section headings. */}
+      <h2
+        id={id}
+        className="mb-4 font-display text-[28px] font-medium leading-tight text-ink-900 md:text-[40px]"
+      >
         {title}
       </h2>
       {children}
@@ -42,7 +52,7 @@ export function ProductDetails({ product, className }: { product: Product; class
       {description ? (
         <Section id="description-title" title="Description">
           <div
-            className={cn(RICH_TEXT, 'max-w-[68ch]')}
+            className={cn(RICH_TEXT, MEASURE)}
             // Sanitized: allowed tags only, no attributes (docs/p5-catalog.md §7).
             dangerouslySetInnerHTML={{ __html: description }}
           />
@@ -54,7 +64,7 @@ export function ProductDetails({ product, className }: { product: Product; class
         <div className="flex flex-col gap-12">
           {howToUse ? (
             <Section id="how-to-use-title" title="How to use">
-              <p className="whitespace-pre-line text-ink-900">{howToUse}</p>
+              <p className={cn('whitespace-pre-line text-ink-900', MEASURE)}>{howToUse}</p>
             </Section>
           ) : null}
           {ingredients ? (
