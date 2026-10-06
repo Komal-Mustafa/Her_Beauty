@@ -259,7 +259,7 @@ describe('image strip (below 1024 px)', () => {
 
 describe('gallery helpers', () => {
   it('falls back to the product images when the media list has none', async () => {
-    const { galleryImages } = await import('./product-gallery');
+    const { galleryImages } = await import('./gallery-media');
     const product = lipstick();
     expect(galleryImages({ ...product, media: [] }).map((i) => i.url)).toEqual([
       '/placeholders/lipstick-1.svg',
@@ -267,8 +267,17 @@ describe('gallery helpers', () => {
     ]);
   });
 
+  it('has tabs only when there is a video or a 3D item', async () => {
+    const { hasGalleryTabs } = await import('./gallery-media');
+    const product = lipstick();
+    expect(hasGalleryTabs(product)).toBe(true);
+    expect(hasGalleryTabs(lipOil())).toBe(false);
+    const video = product.media.filter((m) => m.type !== 'model3d');
+    expect(hasGalleryTabs({ ...product, media: video })).toBe(true);
+  });
+
   it('finds a 3D item only when it has a model kind or a file', async () => {
-    const { galleryModel } = await import('./product-gallery');
+    const { galleryModel } = await import('./gallery-media');
     const product = lipstick();
     const bare = product.media.map((m) =>
       m.type === 'model3d' ? { ...m, model3dKind: null, url: '' } : m,

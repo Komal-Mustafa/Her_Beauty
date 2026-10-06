@@ -1,7 +1,6 @@
 'use client';
 
 import type { ModelKind } from '@hb/three/3d';
-import type { Product } from '@hb/types';
 import {
   Badge,
   prefersReducedMotion,
@@ -13,7 +12,8 @@ import {
 import { DURATION, EASE_SOFT_CSS } from '@hb/ui/motion';
 import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { GalleryImages, type GalleryImage } from './gallery-images';
+import { GalleryImages } from './gallery-images';
+import { galleryImages, galleryModel, galleryVideo } from './gallery-media';
 import { useProduct } from './product-context';
 
 // three.js + R3F stay out of first-load JS: this chunk loads the first time the 3D tab opens.
@@ -27,21 +27,6 @@ const ORDER: readonly TabId[] = ['images', 'video', '3d'];
 
 /** Distance the incoming panel slides (px), from the side of the tab that was picked. */
 const SLIDE = 12;
-
-export function galleryImages(product: Product): GalleryImage[] {
-  const media = product.media.filter((m) => m.type === 'image' && m.url);
-  if (media.length) return media.map((m) => ({ id: m.id, url: m.url, alt: m.alt }));
-  return product.images.map((a, i) => ({ id: `image-${i}`, url: a.url, alt: a.alt }));
-}
-
-/** The 3D item: a procedural kind or a model file. */
-export function galleryModel(product: Product) {
-  return product.media.find((m) => m.type === 'model3d' && (m.model3dKind || m.url)) ?? null;
-}
-
-export function galleryVideo(product: Product) {
-  return product.media.find((m) => m.type === 'video' && m.url) ?? null;
-}
 
 /**
  * Product gallery (docs/p5-catalog.md §5): Images | Video | 3D tabs, only for media the product
