@@ -1,8 +1,10 @@
 'use client';
 
-import { Canvas, type CanvasProps } from '@react-three/fiber';
+import { addAfterEffect, Canvas, useThree, type CanvasProps } from '@react-three/fiber';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { Texture } from 'three';
 import { TIER_SETTINGS, type DeviceTier } from '../tier';
+import { findSharedLut } from './shared-textures';
 
 type TieredCanvasProps = {
   tier: Exclude<DeviceTier, 'low'>;
@@ -16,11 +18,36 @@ type TieredCanvasProps = {
 };
 
 /**
+ * Disposes three's shared DFG texture when the canvas unmounts (see `findSharedLut`): that removes
+ * the listener through which it holds this renderer, so the canvas and the page it was on can be
+ * collected. Another canvas still on screen uploads the texture again on its next frame. The
+ * texture is found after a drawn frame, while the renderer still knows its materials (R3F's
+ * teardown, after this cleanup, resets that).
+ */
+function ReleaseSharedTextures() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    let lut: Texture | null = null;
+    const stop = addAfterEffect(() => {
+      lut ??= findSharedLut(gl, scene);
+      if (lut) stop();
+    });
+    return () => {
+      stop();
+      lut?.dispose();
+    };
+  }, [gl, scene]);
+  return null;
+}
+
+/**
  * R3F canvas tuned per device tier (02-trd §8):
  * - DPR capped by tier, antialias + shadows on high only
  * - render loop pauses when the canvas is off-screen or the tab is hidden, so a page with several
  *   3D blocks only ever animates what the shopper can see
- * - R3F disposes the renderer and forces context loss on unmount
+ * - R3F disposes the renderer and forces context loss on unmount; the texture three shares between
+ *   renderers is let go of too, or it would keep this canvas and its page alive (02-trd §8)
  */
 export function TieredCanvas({
   tier,
@@ -60,6 +87,7 @@ export function TieredCanvas({
         camera={camera ?? { position: [0, 0.9, 6.4], fov: 32 }}
         onCreated={() => requestAnimationFrame(() => onReady?.())}
       >
+        <ReleaseSharedTextures />
         {children}
       </Canvas>
     </div>
