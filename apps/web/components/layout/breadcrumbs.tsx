@@ -27,7 +27,8 @@ export function Breadcrumbs({ items, className }: { items: readonly Crumb[]; cla
               ) : (
                 <Link
                   href={crumb.href}
-                  className="inline-flex min-h-11 items-center whitespace-nowrap text-ink-500 underline-offset-4 transition-colors duration-fast hover:text-pink-700 hover:underline"
+                  // At least 44 × 44 px to tap (docs/p5-catalog.md §9), however short the name.
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center whitespace-nowrap text-ink-500 underline-offset-4 transition-colors duration-fast hover:text-pink-700 hover:underline"
                 >
                   {crumb.label}
                 </Link>
