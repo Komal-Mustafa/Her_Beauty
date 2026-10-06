@@ -34,6 +34,8 @@ const fly = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/fly-to-cart', () => ({ flyToCart: fly }));
 
 let reduced = false;
+/** Whether the window is 1024 px or wider. */
+let desktop = false;
 const animate = vi.fn();
 const scrollTo = vi.fn();
 
@@ -63,12 +65,17 @@ const tab = (name: string) => gallery().getByRole('tab', { name });
 
 beforeEach(() => {
   reduced = false;
+  desktop = false;
   viewer.renders.length = 0;
   fly.mockClear();
   animate.mockClear();
   window.localStorage.clear();
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('prefers-reduced-motion') ? reduced : false,
+    matches: query.includes('prefers-reduced-motion')
+      ? reduced
+      : query.includes('min-width: 64rem')
+        ? desktop
+        : false,
     media: query,
     onchange: null,
     addEventListener: () => {},
@@ -226,6 +233,27 @@ describe('ProductGallery', () => {
     const [{ imageSrc, from }] = fly.mock.lastCall as [{ imageSrc: string; from: unknown[] }];
     expect(imageSrc).toContain('lipstick-2.svg');
     expect((from[0] as HTMLImageElement).alt).toBe('Velvet Matte Lipstick, open');
+  });
+});
+
+describe('image strip (below 1024 px)', () => {
+  it('is a named list and a Tab stop while it scrolls', async () => {
+    await renderGallery();
+    const strip = gallery().getByRole('list', { name: 'Product images' });
+    expect(strip.tabIndex).toBe(0);
+  });
+
+  it('is no Tab stop from 1024 px, where it shows one image', async () => {
+    desktop = true;
+    await renderGallery();
+    const strip = gallery().getByRole('list', { name: 'Product images' });
+    expect(strip.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('is no Tab stop with a single image, which does not scroll', async () => {
+    await renderGallery(lipOil());
+    const strip = gallery().getByRole('list', { name: 'Product images' });
+    expect(strip.hasAttribute('tabindex')).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@
 
 import { cn, usePrefersReducedMotion } from '@hb/ui';
 import Image from 'next/image';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 
 export type GalleryImage = { id: string; url: string; alt: string };
 
@@ -16,16 +16,34 @@ type GalleryImagesProps = {
 const SIZES = '(min-width: 1280px) 740px, (min-width: 1024px) 58vw, 100vw';
 const DESKTOP = '(min-width: 64rem)';
 
+function subscribeDesktop(onChange: () => void): () => void {
+  if (typeof window.matchMedia !== 'function') return () => {};
+  const mql = window.matchMedia(DESKTOP);
+  mql.addEventListener('change', onChange);
+  return () => mql.removeEventListener('change', onChange);
+}
+
+/** From 1024 px (one main image, no strip). False on the server: the strip comes first. */
+function useDesktop(): boolean {
+  return useSyncExternalStore(
+    subscribeDesktop,
+    () => typeof window.matchMedia === 'function' && window.matchMedia(DESKTOP).matches,
+    () => false,
+  );
+}
+
 /**
  * Product images (docs/p5-catalog.md §5). Below 1024 px: a horizontal scroll-snap strip (native
  * swipe) with dot buttons; from 1024 px: one main image with a row of thumbnail buttons
  * (`aria-pressed`). One list serves both layouts, so no image is downloaded twice. The first
- * image is the page's LCP and loads with priority.
+ * image is the page's LCP and loads with priority. The strip is a named list and, while it
+ * scrolls, a Tab stop, so keyboard users can scroll it with the arrow keys (the dots also work).
  */
 export function GalleryImages({ images, activeRef }: GalleryImagesProps) {
   const [active, setActive] = useState(0);
   const strip = useRef<HTMLUListElement>(null);
   const reduced = usePrefersReducedMotion();
+  const desktop = useDesktop();
 
   // Swiping the strip moves the dots (one rAF per burst of scroll events).
   useEffect(() => {
@@ -75,6 +93,10 @@ export function GalleryImages({ images, activeRef }: GalleryImagesProps) {
     <div>
       <ul
         ref={strip}
+        aria-label="Product images"
+        // A scrolling region must be reachable from the keyboard (WCAG 2.1.1); from 1024 px the list
+        // shows one image and does not scroll.
+        tabIndex={many && !desktop ? 0 : undefined}
         // Lenis would read a sideways trackpad swipe as page scroll.
         data-lenis-prevent-horizontal
         className={cn(
