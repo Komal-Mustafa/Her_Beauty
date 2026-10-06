@@ -91,7 +91,8 @@ function ReviewCard({ review }: { review: Review }) {
     <article className="rounded-card border border-ink-200 bg-white p-5 md:p-6">
       <Stars value={review.rating} />
       <h3 className="mt-3 font-sans text-base font-semibold text-ink-900">{review.title}</h3>
-      {review.body ? <p className="mt-2 text-ink-900">{review.body}</p> : null}
+      {/* About 70 characters a line (04 §3), as the description. */}
+      {review.body ? <p className="mt-2 max-w-[35rem] text-ink-900">{review.body}</p> : null}
       <ReviewPhotos photos={review.photos} author={review.authorName} />
       <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-500">
         <span className="font-medium text-ink-900">{review.authorName}</span>

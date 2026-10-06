@@ -10,6 +10,12 @@ import { lipOil, lipstick, perfume } from './test-product';
 const fly = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/fly-to-cart', () => ({ flyToCart: fly }));
 
+/** The query of the URL as the app router knows it; null renders outside the router. */
+const router = vi.hoisted(() => ({ search: null as string | null }));
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => (router.search === null ? null : new URLSearchParams(router.search)),
+}));
+
 const PAGE = '/product/velvet-matte-lipstick';
 
 /** A fresh page (new stores): the header's cart link, the buy box and the sticky bar. */
@@ -38,7 +44,7 @@ async function renderBuyBox(product: Product = lipstick(), shade?: string) {
 }
 
 const box = () => within(screen.getByRole('region', { name: 'Buy box' }));
-const bar = () => document.querySelector<HTMLElement>('.sticky > div')!;
+const bar = () => document.querySelector<HTMLElement>('[data-sticky-buy-bar] > div')!;
 const input = () => box().getByLabelText('Quantity') as HTMLInputElement;
 const toast = () => screen.getByRole('status');
 const storedCart = (): CartLine[] =>
@@ -94,6 +100,7 @@ function mainButtonIs(where: 'visible' | 'above' | 'below') {
 }
 
 beforeEach(() => {
+  router.search = null;
   window.localStorage.clear();
   window.history.replaceState(null, '', PAGE);
   fly.mockClear();
@@ -233,6 +240,30 @@ describe('BuyBox', () => {
       variantId: 'velvet-v2',
       title: 'Velvet Matte Lipstick, Rose Petal',
     });
+  });
+
+  it('takes the shade from the router URL when Back brings back a page rendered without it', async () => {
+    // The cached page was rendered for /product/velvet-matte-lipstick (Berry Kiss), the history
+    // entry's URL has the shade picked before leaving.
+    router.search = 'shade=nude-silk';
+    await renderBuyBox();
+    expect(
+      box().getByRole('radio', { name: 'Nude Silk, sold out' }).getAttribute('aria-checked'),
+    ).toBe('true');
+    expect(
+      (box().getByRole('button', { name: 'Out of stock' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it("writes the shade without Next's history state, so the router records the URL", async () => {
+    // The entry as the app router leaves it.
+    window.history.replaceState({ __NA: true }, '', PAGE);
+    const replace = vi.spyOn(window.history, 'replaceState');
+    await renderBuyBox();
+    fireEvent.click(box().getByRole('radio', { name: 'Rose Petal' }));
+    // Next's patched replaceState skips its own bookkeeping for a state object it made itself.
+    expect(replace).toHaveBeenLastCalledWith(null, '', expect.any(URL));
+    expect(String(replace.mock.lastCall?.[2])).toMatch(/\?shade=rose-petal$/);
   });
 
   it('shows a sold-out shade from the URL with the out-of-stock state', async () => {
@@ -381,24 +412,44 @@ describe('StickyBuyBar', () => {
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
       this: HTMLElement,
     ) {
-      return this.classList.contains('sticky') ? 72 : 0;
+      return this.hasAttribute('data-sticky-buy-bar') ? 72 : 0;
     });
     const html = document.documentElement.style;
+    const body = document.body.style;
     await renderBuyBox();
     expect(html.getPropertyValue('--toast-offset')).toBe('');
+    expect(body.getPropertyValue('padding-bottom')).toBe('');
 
     mainButtonIs('above');
     expect(html.getPropertyValue('--toast-offset')).toBe('72px');
     expect(html.getPropertyValue('scroll-padding-bottom')).toBe('calc(72px + 1rem)');
+    // The page can scroll its footer clear of the fixed bar.
+    expect(body.getPropertyValue('padding-bottom')).toBe('72px');
 
     mainButtonIs('visible');
     expect(html.getPropertyValue('--toast-offset')).toBe('');
     expect(html.getPropertyValue('scroll-padding-bottom')).toBe('');
+    expect(body.getPropertyValue('padding-bottom')).toBe('');
 
     mainButtonIs('above');
     cleanup();
     expect(html.getPropertyValue('--toast-offset')).toBe('');
     expect(html.getPropertyValue('scroll-padding-bottom')).toBe('');
+    expect(body.getPropertyValue('padding-bottom')).toBe('');
+  });
+
+  it('takes no taps while hidden: only the shown panel catches the pointer', async () => {
+    await renderBuyBox();
+    const wrapper = bar().parentElement!;
+    // Fixed to the bottom of the window, so its box is there even while the bar is hidden.
+    expect(wrapper.className).toContain('fixed');
+    expect(wrapper.className).toContain('pointer-events-none');
+    expect(bar().className).toContain('pointer-events-none');
+    expect(bar().className).not.toContain('pointer-events-auto');
+    mainButtonIs('above');
+    expect(bar().className).toContain('pointer-events-auto');
+    mainButtonIs('visible');
+    expect(bar().className).not.toContain('pointer-events-auto');
   });
 
   it('reserves nothing where the bar is not displayed (from 1024 px)', async () => {
@@ -407,6 +458,7 @@ describe('StickyBuyBar', () => {
     mainButtonIs('above');
     expect(document.documentElement.style.getPropertyValue('--toast-offset')).toBe('');
     expect(document.documentElement.style.getPropertyValue('scroll-padding-bottom')).toBe('');
+    expect(document.body.style.getPropertyValue('padding-bottom')).toBe('');
   });
 
   it('shows the shade and price and adds from its own button', async () => {

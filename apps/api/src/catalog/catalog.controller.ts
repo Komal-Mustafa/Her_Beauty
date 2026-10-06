@@ -1,12 +1,41 @@
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { Controller, type ExecutionContext, Get, Inject, Param, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Id, PkCity, ProductQuery, SearchQuery, Slug } from '@hb/types';
+import type { Request } from 'express';
 import { z } from 'zod';
-import { PerMinute, Public } from '../auth/decorators';
+import { DEFAULT_PER_MINUTE, Public } from '../auth/decorators';
 import { coerceQuery, parse } from '../common/validate';
 import { CatalogService } from './catalog.service';
 
 /** security.md §11: search is limited per IP. */
 const SEARCH_PER_MINUTE = 60;
+
+/**
+ * One search allowance per IP for every request that runs the typo-tolerant search: all of
+ * GET /search, and GET /products with `q` (docs/p5-catalog.md §3.3: the same matcher over the same
+ * scan of live products). Other requests to the route keep the global limit and their own count.
+ * The storefront's keyed reads are not counted at all (ApiThrottlerGuard).
+ */
+function SearchLimit(runsSearch: (req: Request) => boolean = () => true) {
+  const searching = (context: ExecutionContext) =>
+    runsSearch(context.switchToHttp().getRequest<Request>());
+  return Throttle({
+    default: {
+      ttl: 60_000,
+      limit: (context) => (searching(context) ? SEARCH_PER_MINUTE : DEFAULT_PER_MINUTE),
+      generateKey: (context, tracker, name) =>
+        searching(context)
+          ? `search-${name}-${tracker}`
+          : `${context.getClass().name}-${context.getHandler().name}-${name}-${tracker}`,
+    },
+  });
+}
+
+/** A /products request with a text query (any non-empty `q`, valid or not: it is counted first). */
+const hasTextQuery = (req: Request) => {
+  const q = req.query['q'];
+  return Array.isArray(q) ? q.length > 0 : typeof q === 'string' && q.length > 0;
+};
 
 /** Query-string types shared by GET /products and GET /search (docs/p5-catalog.md §3.3). */
 const LIST_COERCION = {
@@ -45,7 +74,7 @@ export class CatalogController {
 
   /** The listing engine for every listing page: filters, facets, sort and numbered pages. */
   @Get('search')
-  @PerMinute(SEARCH_PER_MINUTE)
+  @SearchLimit()
   search(@Query() raw: Record<string, unknown>) {
     const query = parse(
       SearchQuery.strict(),
@@ -58,6 +87,7 @@ export class CatalogController {
   }
 
   @Get('products')
+  @SearchLimit(hasTextQuery)
   products(@Query() raw: Record<string, unknown>) {
     const query = parse(
       ProductQuery.strict(),

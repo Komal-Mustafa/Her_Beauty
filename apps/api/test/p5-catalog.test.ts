@@ -432,6 +432,31 @@ describe.skipIf(!hasDb)('P5a catalogue: search, product filters and delivery', (
       await api.get('/search?pageSize=1').expect(200);
     });
 
+    it('holds GET /products with q to the same 60 a minute per client IP', async () => {
+      const ip = nextIp();
+      for (let i = 0; i < 60; i++) {
+        await api.get('/products?q=lipstik&limit=1', undefined, ip).expect(200);
+      }
+      const limited = await api.get('/products?q=lipstik&limit=1', undefined, ip).expect(429);
+      expect(ErrorBody.parse(limited.body).error.code).toBe('RATE_LIMITED');
+    });
+
+    it('counts /search and /products?q= against one allowance, not /products without q', async () => {
+      const ip = nextIp();
+      for (let i = 0; i < 30; i++) await api.get('/search?pageSize=1', undefined, ip).expect(200);
+      const shared = await api.get('/products?q=serum&limit=1', undefined, ip).expect(200);
+      expect(shared.headers['x-ratelimit-remaining']).toBe('29');
+      for (let i = 0; i < 29; i++) {
+        await api.get('/products?q=serum&limit=1', undefined, ip).expect(200);
+      }
+      await api.get('/search?pageSize=1', undefined, ip).expect(429);
+      await api.get('/products?q=serum&limit=1', undefined, ip).expect(429);
+      // A plain product list is no search: it keeps the global limit and its own count.
+      const plain = await api.get('/products?limit=1', undefined, ip).expect(200);
+      expect(plain.headers['x-ratelimit-limit']).toBe('300');
+      expect(plain.headers['x-ratelimit-remaining']).toBe('299');
+    });
+
     describe("the storefront server's reads (SSR for many shoppers from one IP)", () => {
       const key = must(process.env.STOREFRONT_API_KEY, 'STOREFRONT_API_KEY');
       const fromServer = (path: string, ip: string, sentKey: string = key) =>

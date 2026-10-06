@@ -78,7 +78,7 @@ describe('DeliveryPanel', () => {
     await flush();
     expect(getEstimate).toHaveBeenCalledWith(SLUG, 'Lahore');
     expect(status().textContent).toBe(
-      '2–4 days · Rs 250 · free over Rs 3,000 · Cash on delivery available',
+      'Lahore: 2–4 days · Rs 250 · free over Rs 3,000 · Cash on delivery available',
     );
     expect(window.localStorage.getItem(CITY_STORAGE_KEY)).toBe('"Lahore"');
     // The select is described by the result, so focusing it reads the estimate.
@@ -96,7 +96,7 @@ describe('DeliveryPanel', () => {
     expect(select().value).toBe('Gilgit');
     expect(getEstimate).toHaveBeenCalledWith(SLUG, 'Gilgit');
     expect(status().textContent).toBe(
-      '5–9 days · Delivery fee confirmed at checkout · free over Rs 3,000 · Cash on delivery available',
+      'Gilgit: 5–9 days · Delivery fee confirmed at checkout · free over Rs 3,000 · Cash on delivery available',
     );
   });
 
@@ -120,7 +120,7 @@ describe('DeliveryPanel', () => {
     await act(async () => answer.settle({ ok: true, estimate: estimate('Karachi') }));
     observer.disconnect();
     expect(select().value).toBe('Karachi');
-    expect(status().textContent).toMatch(/^2–4 days/);
+    expect(status().textContent).toMatch(/^Karachi: 2–4 days/);
     expect(seen.some((text) => text.startsWith('Choose your city'))).toBe(false);
   });
 
@@ -147,20 +147,21 @@ describe('DeliveryPanel', () => {
     act(() => vi.advanceTimersByTime(99));
     expect(status().textContent).toBe('');
     await act(async () => first.settle({ ok: true, estimate: estimate('Karachi') }));
-    expect(status().textContent).toMatch(/^2–4 days/);
+    expect(status().textContent).toMatch(/^Karachi: 2–4 days/);
     act(() => vi.advanceTimersByTime(500));
-    expect(status().textContent).toMatch(/^2–4 days/);
+    expect(status().textContent).toMatch(/^Karachi: 2–4 days/);
 
     // Slow: the previous answer stays for 100 ms, then "Checking…", then the new answer.
     choose('Quetta');
     act(() => vi.advanceTimersByTime(99));
-    expect(status().textContent).toMatch(/^2–4 days/);
+    // Still read as Karachi's answer, which it is.
+    expect(status().textContent).toMatch(/^Karachi: 2–4 days/);
     act(() => vi.advanceTimersByTime(1));
     expect(status().textContent).toBe('Checking delivery to Quetta…');
     await act(async () =>
       second.settle({ ok: true, estimate: estimate('Quetta', { daysMin: 3, daysMax: 5 }) }),
     );
-    expect(status().textContent).toMatch(/^3–5 days/);
+    expect(status().textContent).toMatch(/^Quetta: 3–5 days/);
   });
 
   it('says when there is no estimate, keeps working, and tries again on request', async () => {
@@ -172,14 +173,14 @@ describe('DeliveryPanel', () => {
     await renderPanel(getEstimate);
     choose('Multan');
     await flush();
-    expect(status().textContent).toBe('We couldn’t get an estimate right now.');
+    expect(status().textContent).toBe('Multan: We couldn’t get an estimate right now.');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await flush();
-    expect(status().textContent).toBe('We couldn’t get an estimate right now.');
+    expect(status().textContent).toBe('Multan: We couldn’t get an estimate right now.');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await flush();
     expect(getEstimate).toHaveBeenCalledTimes(3);
-    expect(status().textContent).toMatch(/^2–4 days/);
+    expect(status().textContent).toMatch(/^Multan: 2–4 days/);
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
@@ -199,7 +200,7 @@ describe('DeliveryPanel', () => {
     await act(async () => retry.settle({ ok: true, estimate: estimate('Quetta') }));
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(document.activeElement).toBe(select());
-    expect(status().textContent).toMatch(/^2–4 days/);
+    expect(status().textContent).toMatch(/^Quetta: 2–4 days/);
   });
 
   it('ignores an answer for a city the shopper has already changed', async () => {
@@ -216,6 +217,26 @@ describe('DeliveryPanel', () => {
     choose('Sukkur');
     await flush();
     await act(async () => lahore.settle({ ok: true, estimate: estimate('Lahore') }));
-    expect(status().textContent).toMatch(/^4–6 days/);
+    expect(status().textContent).toMatch(/^Sukkur: 4–6 days/);
+  });
+
+  it('announces a new city even when its estimate is the same as the last one', async () => {
+    const getEstimate = vi.fn<GetEstimate>(async (_slug, city) => ({
+      ok: true,
+      estimate: estimate(city, { zone: 'nationwide', daysMin: 4, daysMax: 6 }),
+    }));
+    await renderPanel(getEstimate);
+    choose('Lahore');
+    await flush();
+    const changes: string[] = [];
+    const observer = new MutationObserver(() => changes.push(status().textContent ?? ''));
+    observer.observe(status(), { subtree: true, childList: true, characterData: true });
+    choose('Faisalabad');
+    await flush();
+    observer.disconnect();
+    // The live region changes, so it is read again; on screen only the select names the city.
+    expect(changes.at(-1)).toMatch(/^Faisalabad: 4–6 days/);
+    const city = status().querySelector('.sr-only');
+    expect(city?.textContent).toBe('Faisalabad: ');
   });
 });

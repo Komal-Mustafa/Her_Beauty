@@ -34,6 +34,8 @@ const fly = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/fly-to-cart', () => ({ flyToCart: fly }));
 
 let reduced = false;
+/** Whether the window is 1024 px or wider. */
+let desktop = false;
 const animate = vi.fn();
 const scrollTo = vi.fn();
 
@@ -63,12 +65,17 @@ const tab = (name: string) => gallery().getByRole('tab', { name });
 
 beforeEach(() => {
   reduced = false;
+  desktop = false;
   viewer.renders.length = 0;
   fly.mockClear();
   animate.mockClear();
   window.localStorage.clear();
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('prefers-reduced-motion') ? reduced : false,
+    matches: query.includes('prefers-reduced-motion')
+      ? reduced
+      : query.includes('min-width: 64rem')
+        ? desktop
+        : false,
     media: query,
     onchange: null,
     addEventListener: () => {},
@@ -229,9 +236,30 @@ describe('ProductGallery', () => {
   });
 });
 
+describe('image strip (below 1024 px)', () => {
+  it('is a named list and a Tab stop while it scrolls', async () => {
+    await renderGallery();
+    const strip = gallery().getByRole('list', { name: 'Product images' });
+    expect(strip.tabIndex).toBe(0);
+  });
+
+  it('is no Tab stop from 1024 px, where it shows one image', async () => {
+    desktop = true;
+    await renderGallery();
+    const strip = gallery().getByRole('list', { name: 'Product images' });
+    expect(strip.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('is no Tab stop with a single image, which does not scroll', async () => {
+    await renderGallery(lipOil());
+    const strip = gallery().getByRole('list', { name: 'Product images' });
+    expect(strip.hasAttribute('tabindex')).toBe(false);
+  });
+});
+
 describe('gallery helpers', () => {
   it('falls back to the product images when the media list has none', async () => {
-    const { galleryImages } = await import('./product-gallery');
+    const { galleryImages } = await import('./gallery-media');
     const product = lipstick();
     expect(galleryImages({ ...product, media: [] }).map((i) => i.url)).toEqual([
       '/placeholders/lipstick-1.svg',
@@ -239,8 +267,17 @@ describe('gallery helpers', () => {
     ]);
   });
 
+  it('has tabs only when there is a video or a 3D item', async () => {
+    const { hasGalleryTabs } = await import('./gallery-media');
+    const product = lipstick();
+    expect(hasGalleryTabs(product)).toBe(true);
+    expect(hasGalleryTabs(lipOil())).toBe(false);
+    const video = product.media.filter((m) => m.type !== 'model3d');
+    expect(hasGalleryTabs({ ...product, media: video })).toBe(true);
+  });
+
   it('finds a 3D item only when it has a model kind or a file', async () => {
-    const { galleryModel } = await import('./product-gallery');
+    const { galleryModel } = await import('./gallery-media');
     const product = lipstick();
     const bare = product.media.map((m) =>
       m.type === 'model3d' ? { ...m, model3dKind: null, url: '' } : m,

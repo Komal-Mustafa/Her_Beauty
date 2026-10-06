@@ -64,7 +64,10 @@ export function SiteHeader({ categories, nav }: SiteHeaderProps) {
         </button>
 
         <Link href="/" aria-label="Her Beauty home" className="shrink-0">
-          <Logo />
+          {/* Under 360 px (a 320 px phone, 400 % zoom) the round seal alone, so the header fits
+              without sideways scrolling (WCAG 1.4.10). */}
+          <Logo className="max-xs:hidden" />
+          <Logo variant="seal" className="h-10 xs:hidden" />
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
@@ -122,7 +125,7 @@ export function SiteHeader({ categories, nav }: SiteHeaderProps) {
           ))}
         </nav>
 
-        <SearchForm className="ml-auto hidden w-full max-w-sm md:block" />
+        <SearchForm label="Site search" className="ml-auto hidden w-full max-w-sm md:block" />
 
         <div className="ml-auto flex items-center md:ml-0">
           <Link href="/search" aria-label="Search" className={cn(iconLink, 'md:hidden')}>

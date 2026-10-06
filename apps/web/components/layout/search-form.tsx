@@ -1,10 +1,20 @@
 import { Search } from 'lucide-react';
 import { cn } from '@hb/ui';
 
+type SearchFormProps = {
+  className?: string;
+  id?: string;
+  /**
+   * Name of the search landmark. A page with more than one search form names each one
+   * differently (the header's is "Site search"), so landmark lists can tell them apart.
+   */
+  label?: string;
+};
+
 /** Plain GET form → /search?q= (works without JS). */
-export function SearchForm({ className, id = 'site-search' }: { className?: string; id?: string }) {
+export function SearchForm({ className, id = 'site-search', label }: SearchFormProps) {
   return (
-    <form action="/search" role="search" className={cn('relative', className)}>
+    <form action="/search" role="search" aria-label={label} className={cn('relative', className)}>
       <label htmlFor={id} className="sr-only">
         Search products, brands and sellers
       </label>

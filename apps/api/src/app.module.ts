@@ -6,6 +6,7 @@ import { AdsController } from './ads/ads.controller';
 import { AdsService } from './ads/ads.service';
 import { AuditModule } from './audit/audit.module';
 import { AuthGuard } from './auth/auth.guard';
+import { DEFAULT_PER_MINUTE } from './auth/decorators';
 import { AuthModule } from './auth/auth.module';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
@@ -26,7 +27,7 @@ import { StorefrontService } from './storefront/storefront.service';
     AuditModule,
     MessagingModule,
     // security.md: rate limits. Default 300 req/min per IP; auth routes set tighter limits.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: DEFAULT_PER_MINUTE }]),
     AuthModule,
     SellerModule,
     AdminModule,

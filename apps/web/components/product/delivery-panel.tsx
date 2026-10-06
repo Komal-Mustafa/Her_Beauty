@@ -20,8 +20,8 @@ type DeliveryPanelProps = {
   getEstimate: (productSlug: string, city: PkCity) => Promise<DeliveryEstimateResult>;
 };
 
-/** One request: the city and how many times the shopper has chosen or retried. */
-type Answer = { key: string; result: DeliveryEstimateResult };
+/** The answer to one request (`key`: the city and how many times the shopper chose or retried). */
+type Answer = { key: string; city: PkCity; result: DeliveryEstimateResult };
 
 const noSubscription = () => () => {};
 
@@ -41,8 +41,9 @@ function useHydrated(): boolean {
  * "Delivery to [city ▾]" under Add to cart (docs/p5-catalog.md §5 "Delivery estimate"): a native
  * select of the listed cities by province, remembered in `hb_city_v1`, and the estimate for the
  * chosen city from a server action. The result line is a polite live region with room reserved
- * for the longest answer, so answers neither jump the layout nor go unannounced. A failure says
- * so and offers a retry; the rest of the page is unaffected.
+ * for the longest answer, so answers neither jump the layout nor go unannounced: each answer is
+ * read with its city, so a new city with the same estimate as the last is still announced. A
+ * failure says so and offers a retry; the rest of the page is unaffected.
  */
 export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) {
   const id = useId();
@@ -61,7 +62,7 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
     const timer = window.setTimeout(() => setSlowKey(key), LOADING_TEXT_DELAY_MS);
     const settle = (result: DeliveryEstimateResult) => {
       window.clearTimeout(timer);
-      if (current) setAnswer({ key, result });
+      if (current) setAnswer({ key, city, result });
     };
     getEstimate(productSlug, city).then(settle, () => settle({ ok: false }));
     return () => {
@@ -72,12 +73,13 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
 
   // Until the answer for this request arrives: "Checking…" once it is slow, before that the
   // previous answer (or nothing), so a quick answer replaces it without a flash.
-  const settled = answer?.key === key ? answer.result : null;
+  const slow = slowKey === key;
+  const current = !hydrated || !city ? null : answer?.key === key || !slow ? answer : null;
   const shown: DeliveryEstimateResult | 'prompt' | 'loading' | null = !hydrated
     ? null
     : !city
       ? 'prompt'
-      : (settled ?? (slowKey === key ? 'loading' : (answer?.result ?? null)));
+      : (current?.result ?? (slow ? 'loading' : null));
 
   let line: ReactNode = null;
   if (shown === 'prompt') line = 'Choose your city to see delivery time and cost.';
@@ -90,6 +92,9 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
       </>
     );
   } else if (shown) line = 'We couldn’t get an estimate right now.';
+  // Read before the answer, so a new city with the same estimate is announced too (on screen the
+  // select shows the city).
+  const answerCity = current ? <span className="sr-only">{`${current.city}: `}</span> : null;
 
   return (
     <div className="@container rounded-card border border-ink-200 bg-white p-4">
@@ -132,6 +137,7 @@ export function DeliveryPanel({ productSlug, getEstimate }: DeliveryPanelProps) 
           21rem (a 360 px phone), two from there; in rem, so it holds at any text size. */}
       <div className="mt-3 flex min-h-15 flex-wrap items-start gap-x-3 @min-[21rem]:min-h-10">
         <p id={`${id}-result`} role="status" className="text-sm leading-5 text-ink-500">
+          {answerCity}
           {line}
         </p>
         {shown !== null && typeof shown === 'object' && !shown.ok ? (

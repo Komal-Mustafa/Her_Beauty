@@ -38,7 +38,7 @@ export function SellerCard({ seller, store }: SellerCardProps) {
             <h2 id="seller-title" className="font-sans text-base font-medium leading-snug">
               <Link
                 href={href}
-                className="text-ink-900 underline-offset-4 hover:text-pink-700 hover:underline"
+                className="inline-flex min-h-11 items-center text-ink-900 underline-offset-4 hover:text-pink-700 hover:underline"
               >
                 {seller.storeName}
               </Link>

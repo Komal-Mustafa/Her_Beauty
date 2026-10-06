@@ -1,6 +1,10 @@
 import { Container, Skeleton } from '@hb/ui';
 
-/** Product page skeleton (docs/p5-catalog.md §1): the same grid as the page, in blush blocks. */
+/**
+ * Product page skeleton (docs/p5-catalog.md §1): the same grid as the page, in blush blocks. The
+ * gallery's tab bar is drawn only for a product whose gallery has one (`data-gallery-tabs`, set by
+ * layout.tsx), at every width, so the image starts where the page's will.
+ */
 export default function ProductLoading() {
   return (
     <Container className="pb-16 pt-2 md:pb-24" aria-busy="true">
@@ -14,7 +18,8 @@ export default function ProductLoading() {
       </div>
       <div className="mt-2 md:grid md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:items-start md:gap-12">
         <div>
-          <Skeleton className="mb-6 hidden h-12 rounded-pill md:block" />
+          {/* Tabs.tsx: a 52 px tab list, then the panel's 24 px top padding. */}
+          <Skeleton className="mb-6 hidden h-13 rounded-pill group-data-[gallery-tabs]/product:block" />
           <Skeleton className="aspect-[4/5] w-full rounded-card" />
         </div>
         <div className="mt-8 flex flex-col gap-6 md:mt-0">
