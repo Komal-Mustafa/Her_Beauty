@@ -78,6 +78,8 @@ export function ListingProvider({
   const [announcement, setAnnouncement] = useState('');
   const changed = useRef(false);
   const refocus = useRef<Refocus | null>(null);
+  // Where the window was scrolled when the change was applied (null: no change on its way).
+  const scrollFrom = useRef<number | null>(null);
   // The filters and sort the count was last read out for (the page number does not change it).
   const shownKey = listingHref(path, { ...params, page: 1 });
   const announcedKey = useRef(shownKey);
@@ -86,6 +88,7 @@ export function ListingProvider({
     (next: ListingParams, then?: Refocus) => {
       changed.current = true;
       refocus.current = then ?? null;
+      scrollFrom.current = window.scrollY;
       // Emptied first, so the same count is announced again after the change.
       setAnnouncement('');
       const href = listingHref(path, next);
@@ -115,7 +118,23 @@ export function ListingProvider({
     }
     refocus.current = null;
     target()?.focus();
+    // Focus may scroll its target into view: that is where the window now stays.
+    if (scrollFrom.current !== null) scrollFrom.current = window.scrollY;
   });
+
+  // The prefetch in `apply` cannot help when the new URL has no search params but the page was
+  // loaded with some: Next then reuses the page's own entry and still jumps to the top, in the
+  // commit that shows the results, after this effect. A microtask runs after that commit and
+  // before the next frame: it puts the window back, so the jump is never painted.
+  useLayoutEffect(() => {
+    const from = scrollFrom.current;
+    if (pending || from === null) return;
+    scrollFrom.current = null;
+    if (from === 0) return;
+    queueMicrotask(() => {
+      if (window.scrollY === 0) window.scrollTo({ top: from, behavior: 'instant' });
+    });
+  }, [pending]);
 
   // Back and Forward change the filters without `apply`: the old count goes at once, the new one
   // is read out when its results show (below).

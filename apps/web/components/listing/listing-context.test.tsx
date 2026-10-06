@@ -84,6 +84,33 @@ describe('ListingProvider navigation', () => {
       router.push.mock.invocationCallOrder[0] ?? 0,
     );
   });
+
+  it('puts the window back if the router still jumps to the top', async () => {
+    // Next does so for a URL without search params when the page was loaded with some.
+    let y = 500;
+    const scrollY = Object.getOwnPropertyDescriptor(window, 'scrollY');
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(((
+      options: ScrollToOptions,
+    ) => {
+      y = options.top ?? y;
+    }) as typeof window.scrollTo);
+    router.push.mockImplementation(() => {
+      y = 0;
+    });
+    try {
+      render(<Listing params={params({ sale: true })} total={2} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('switch', { name: /^On sale only/ }));
+      });
+      expect(router.push).toHaveBeenCalledWith('/category/lips', { scroll: false });
+      expect(scrollTo).toHaveBeenCalledWith({ top: 500, behavior: 'instant' });
+      expect(y).toBe(500);
+    } finally {
+      scrollTo.mockRestore();
+      if (scrollY) Object.defineProperty(window, 'scrollY', scrollY);
+    }
+  });
 });
 
 /**

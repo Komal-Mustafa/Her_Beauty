@@ -272,8 +272,8 @@ type SaleSwitchProps = { count: number; checked: boolean; onChange: (on: boolean
 /**
  * "On sale only" switch: a checkbox with the switch role, the knob slides (transform). Off is an
  * ink-500 outline and knob on white, on a pink-600 track with a white knob: the track and the knob
- * have 3:1 in both states (WCAG 1.4.11). The label is positioned so the hidden checkbox sits in
- * it, and focusing it scrolls the drawer to the switch.
+ * have 3:1 in both states (WCAG 1.4.11). The hidden checkbox covers its whole label, so focusing
+ * it scrolls the whole row into view.
  */
 function SaleSwitch({ count, checked, onChange }: SaleSwitchProps) {
   return (
@@ -285,7 +285,7 @@ function SaleSwitch({ count, checked, onChange }: SaleSwitchProps) {
         value="1"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="peer sr-only"
+        className="peer absolute inset-0 m-0 cursor-pointer appearance-none opacity-0"
       />
       <span aria-hidden className="min-w-0 flex-1 text-sm text-ink-900">
         On sale only

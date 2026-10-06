@@ -235,8 +235,8 @@ export function swatchMarkClass(hex: string): 'text-white' | 'text-ink-900' {
 /**
  * Shade families as round swatches of the family colour with the name underneath. Each is a real
  * checkbox (visually hidden); ticked = gold ring and a check mark, so it never relies on colour.
- * The label is positioned so the hidden checkbox sits in it: focusing it scrolls the drawer to
- * the swatch, not to wherever the dialog would place it.
+ * The hidden checkbox covers its whole label, so focusing it scrolls the whole swatch into view
+ * (a 1 px one would bring only its own pixel, or nothing, in a scrolling drawer).
  */
 export function ShadeSwatches({ options, selected, onToggle }: ShadeSwatchesProps) {
   return (
@@ -250,7 +250,7 @@ export function ShadeSwatches({ options, selected, onToggle }: ShadeSwatchesProp
               value={o.value}
               checked={selected.includes(o.value)}
               onChange={() => onToggle(o.value)}
-              className="peer sr-only"
+              className="peer absolute inset-0 m-0 cursor-pointer appearance-none opacity-0"
             />
             <span
               aria-hidden
