@@ -3,6 +3,7 @@
 import { COLORS_3D } from '@hb/three';
 import type { Product, Variant } from '@hb/types';
 import { useToast } from '@hb/ui';
+import { useSearchParams } from 'next/navigation';
 import {
   createContext,
   useCallback,
@@ -20,6 +21,7 @@ import {
   addableQuantity,
   cartTitle,
   clampQuantity,
+  initialVariant,
   maxQuantity,
   optionKind,
   shadeSlug,
@@ -47,7 +49,10 @@ const ProductContext = createContext<ProductState | null>(null);
 
 type ProductProviderProps = {
   product: Product;
-  /** Chosen on the server from `?shade=` (see `initialVariant`). */
+  /**
+   * Chosen on the server from `?shade=` (see `initialVariant`); used when the URL cannot be read
+   * on the client (outside the app router).
+   */
   initialVariantId: string;
   children: ReactNode;
 };
@@ -56,12 +61,21 @@ type ProductProviderProps = {
  * The product page's shared selection (docs/p5-catalog.md §5): variant and quantity, read by the
  * gallery (3D shade), the buy box and the sticky buy bar. A shade change is written to `?shade=`
  * with `history.replaceState`, so the link can be shared without adding history entries.
+ *
+ * The first variant comes from the URL as the router knows it, not only from the server's render:
+ * Back and Forward bring the page back from the router's cache, rendered for the URL without the
+ * shade picked since, while the address bar has it. Reading `?shade=` here keeps the two in step.
  */
 export function ProductProvider({ product, initialVariantId, children }: ProductProviderProps) {
   const toast = useToast();
   const cart = useCart();
   const kind = optionKind(product.variants);
-  const [variantId, setVariantId] = useState(initialVariantId);
+  const searchParams = useSearchParams();
+  const [variantId, setVariantId] = useState(() =>
+    searchParams
+      ? initialVariant(product, searchParams.get('shade') ?? undefined).id
+      : initialVariantId,
+  );
   const [qty, setQtyState] = useState(1);
   const mainAddRef = useRef<HTMLButtonElement>(null);
   const galleryImageRef = useRef<HTMLElement>(null);
@@ -78,7 +92,9 @@ export function ProductProvider({ product, initialVariantId, children }: Product
       if (kind === 'shade' && next.shadeName) {
         const url = new URL(window.location.href);
         url.searchParams.set('shade', shadeSlug(next.shadeName));
-        window.history.replaceState(window.history.state, '', url);
+        // Without Next's own state object, so its patched replaceState copies that state into the
+        // entry and records the new URL (useSearchParams, and the URL Back and Forward restore).
+        window.history.replaceState(null, '', url);
       }
     },
     [product.variants, kind],
