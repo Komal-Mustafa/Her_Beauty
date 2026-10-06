@@ -18,7 +18,7 @@ export function MobileNav({ open, onOpenChange, categories, nav }: MobileNavProp
     'flex min-h-11 items-center rounded-btn px-3 text-[15px] text-ink-900 hover:bg-blush-50 hover:text-pink-700';
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Menu" placement="right">
-      <SearchForm id="mobile-search" className="mb-6" />
+      <SearchForm id="mobile-search" label="Site search" className="mb-6" />
       <nav aria-label="Mobile">
         <p className="eyebrow mb-2 px-3 text-gold-800">Shop by category</p>
         <ul className="mb-6">

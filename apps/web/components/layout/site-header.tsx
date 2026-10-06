@@ -122,7 +122,7 @@ export function SiteHeader({ categories, nav }: SiteHeaderProps) {
           ))}
         </nav>
 
-        <SearchForm className="ml-auto hidden w-full max-w-sm md:block" />
+        <SearchForm label="Site search" className="ml-auto hidden w-full max-w-sm md:block" />
 
         <div className="ml-auto flex items-center md:ml-0">
           <Link href="/search" aria-label="Search" className={cn(iconLink, 'md:hidden')}>
