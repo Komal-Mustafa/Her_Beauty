@@ -75,12 +75,16 @@ export function FilterDrawer({ className }: { className?: string }) {
         placement="right"
         className={cn('left-0 right-auto w-[min(88vw,380px)] pb-0', styles.drawer)}
       >
-        {/* Wheel scrolling here belongs to the drawer, not to the page's smooth scroll. The inline
-            padding keeps focus rings inside the dialog's scroll box, which clips them. */}
-        <div data-lenis-prevent className="px-1.5">
-          <ListingStatus fresh />
-          <FilterPanel idPrefix="drawer" />
-          <div className="sticky bottom-0 -mx-1.5 mt-2 border-t border-ink-200 bg-white px-1.5 py-4">
+        {/* The filters scroll in a box of their own above the footer, so a filter that takes focus
+            is scrolled into view above it, never left behind it (WCAG 2.4.11). Wheel scrolling
+            here belongs to the drawer, not to the page's smooth scroll. The inline padding keeps
+            focus rings inside the scroll box, which clips them. */}
+        <div data-lenis-prevent className="flex h-full flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5">
+            <ListingStatus fresh />
+            <FilterPanel idPrefix="drawer" />
+          </div>
+          <div className="border-t border-ink-200 px-1.5 py-4">
             <Button
               type="button"
               block

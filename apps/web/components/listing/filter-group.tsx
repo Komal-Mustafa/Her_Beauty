@@ -215,22 +215,42 @@ type ShadeSwatchesProps = {
 };
 
 /**
+ * Relative luminance (WCAG 2.x) at which white and ink-900 contrast equally (4:1) with a colour:
+ * a darker colour gets a white mark, a lighter one an ink-900 mark, so the mark of a ticked
+ * swatch always has at least 4:1 on it (WCAG 1.4.11 asks 3:1; white on gold has 2.1:1).
+ */
+const WHITE_MARK_BELOW = 0.21;
+
+function channel(hex: string, at: number): number {
+  const c = parseInt(hex.slice(at, at + 2), 16) / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** The check mark's colour on a swatch of `hex` (#RRGGBB): white on dark, ink-900 on light. */
+export function swatchMarkClass(hex: string): 'text-white' | 'text-ink-900' {
+  const luminance = 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
+  return luminance < WHITE_MARK_BELOW ? 'text-white' : 'text-ink-900';
+}
+
+/**
  * Shade families as round swatches of the family colour with the name underneath. Each is a real
  * checkbox (visually hidden); ticked = gold ring and a check mark, so it never relies on colour.
+ * The hidden checkbox covers its whole label, so focusing it scrolls the whole swatch into view
+ * (a 1 px one would bring only its own pixel, or nothing, in a scrolling drawer).
  */
 export function ShadeSwatches({ options, selected, onToggle }: ShadeSwatchesProps) {
   return (
     <ul className="grid grid-cols-4 gap-x-1 gap-y-2">
       {options.map((o) => (
         <li key={o.value}>
-          <label className="flex min-h-11 cursor-pointer flex-col items-center gap-1.5 rounded-btn px-0.5 py-1.5 text-center transition-colors duration-fast hover:bg-blush-50">
+          <label className="relative flex min-h-11 cursor-pointer flex-col items-center gap-1.5 rounded-btn px-0.5 py-1.5 text-center transition-colors duration-fast hover:bg-blush-50">
             <input
               type="checkbox"
               name="shade"
               value={o.value}
               checked={selected.includes(o.value)}
               onChange={() => onToggle(o.value)}
-              className="peer sr-only"
+              className="peer absolute inset-0 m-0 cursor-pointer appearance-none opacity-0"
             />
             <span
               aria-hidden
@@ -238,7 +258,12 @@ export function ShadeSwatches({ options, selected, onToggle }: ShadeSwatchesProp
               style={{ backgroundColor: o.hex }}
               className="grid h-8 w-8 place-items-center rounded-pill shadow-soft ring-1 ring-ink-200 ring-offset-2 ring-offset-white transition-[box-shadow] duration-fast peer-checked:ring-2 peer-checked:ring-gold-500 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-pink-400 [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"
             >
-              <Check className="h-4 w-4 text-white drop-shadow-sm transition-opacity duration-fast" />
+              <Check
+                className={cn(
+                  'h-4 w-4 drop-shadow-sm transition-opacity duration-fast',
+                  swatchMarkClass(o.hex),
+                )}
+              />
             </span>
             <span aria-hidden className="text-xs leading-tight text-ink-900">
               {o.label}

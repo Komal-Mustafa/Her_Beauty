@@ -1,12 +1,21 @@
 'use client';
 
 import type { ProductCard } from '@hb/types';
-import { Reveal } from '@hb/ui';
+import { cn, Reveal } from '@hb/ui';
 import { useEffect, useState } from 'react';
 import { ShopProductCard } from '@/components/product/shop-product-card';
 
 /** Cards with `priority` images: the first row on a wide screen, the LCP candidates. */
 const PRIORITY = 4;
+
+/**
+ * At 3 columns (768–1279 px) the 4 cards drawn at once end in the middle of row 2: the rest of
+ * that row is drawn at once too, so a row never half rises (§8 "stagger by column"). CSS, so the
+ * server's markup is right at every width before hydration; `!` beats the inline styles Reveal
+ * animates. (At 2 columns the 4 fill rows 1 and 2; at 4 columns, row 1.)
+ */
+const ROW_END_AT_3 = 6;
+const STILL_AT_3 = 'sm:max-lg:!transform-none sm:max-lg:!opacity-100';
 
 /** Columns per width (docs/p5-catalog.md §2.1): 2, then 3 from 768 px and 4 from 1280 px. */
 const WIDE_COLUMNS = [
@@ -45,7 +54,8 @@ function useGridColumns(): number {
 /**
  * The product grid of a listing page (docs/p5-catalog.md §2.1): 2 columns, 3 from 768 px, 4 from
  * 1280 px (beside the filters from 1024 px). Cards rise in with `Reveal`, staggered by column
- * (§8); the first row is the LCP, so it is drawn at once with priority images instead.
+ * (§8); the first 4 cards are the LCP, so they (and the rest of their row) are drawn at once
+ * with priority images instead.
  */
 export function ListingGrid({ products }: { products: readonly ProductCard[] }) {
   const columns = useGridColumns();
@@ -66,7 +76,12 @@ export function ListingGrid({ products }: { products: readonly ProductCard[] }) 
             {card}
           </li>
         ) : (
-          <Reveal as="li" key={p.id} index={i % columns} className="flex">
+          <Reveal
+            as="li"
+            key={p.id}
+            index={i % columns}
+            className={cn('flex', i < ROW_END_AT_3 && STILL_AT_3)}
+          >
             {card}
           </Reveal>
         );

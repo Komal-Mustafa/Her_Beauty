@@ -6,7 +6,7 @@ import { FILTERS_HEADING_ID } from './ids';
 import { params, renderListing } from './test-listing';
 
 const push = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, prefetch: vi.fn() }) }));
 
 /** A phone-width window that can be widened past 1024 px. */
 const media = { matches: false, listeners: new Set<() => void>() };
