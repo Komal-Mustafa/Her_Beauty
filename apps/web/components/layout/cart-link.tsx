@@ -40,7 +40,8 @@ export function CartLink({ className }: { className?: string }) {
 
   const label = count === 0 ? 'Cart' : `Cart, ${count} ${count === 1 ? 'item' : 'items'}`;
   return (
-    <Link href="/cart" aria-label={label} className={className}>
+    // data-cart-target: where the product page's "fly to cart" copy lands (lib/fly-to-cart.ts).
+    <Link href="/cart" aria-label={label} className={className} data-cart-target="">
       <ShoppingBag aria-hidden className="h-5 w-5" />
       {count > 0 && (
         <span

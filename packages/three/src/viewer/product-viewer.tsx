@@ -13,6 +13,7 @@ import {
 import { TieredCanvas } from '../canvas/tiered-canvas';
 import { Model, type ModelKind } from '../models/model';
 import { Pedestal } from '../models/pedestal';
+import { useReducedMotion } from '../reduced-motion';
 import { GoldDust, Petals } from '../scene/particles';
 import { Studio } from '../scene/studio';
 import { TIER_SETTINGS, type DeviceTier } from '../tier';
@@ -41,6 +42,10 @@ const RESUME_AFTER_MS = 4000;
  * 3D product viewer (03-app-web-flow PDP, 04 §8): drag to rotate, pinch/scroll to zoom within
  * limits, no pan. Arrow keys rotate for keyboard users. Low tier, reduced motion and "still
  * detecting" all show the poster, so the page is never blank.
+ *
+ * When reduced motion is on but WebGL was forced (`tier` prop or `?tier=`), the model stands
+ * still (no auto-rotate, float or particles) and the canvas draws on demand only: a drag, an
+ * arrow key, Reset view or a shade change draws, then it sleeps again.
  */
 export function ProductViewer({
   name,
@@ -56,6 +61,7 @@ export function ProductViewer({
 }: ProductViewerProps) {
   const detected = useDeviceTier();
   const tier = forcedTier ?? detected;
+  const still = useReducedMotion();
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const resumeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [spinning, setSpinning] = useState(autoRotate);
@@ -102,34 +108,45 @@ export function ProductViewer({
   }
 
   const settings = TIER_SETTINGS[tier];
+  const model = (
+    <Model
+      kind={kind}
+      shadeHex={shadeHex}
+      src={src}
+      lidOpen={lidOpen}
+      transmission={tier === 'high'}
+    />
+  );
 
   return (
     <div
       className={frame}
       role="group"
       aria-roledescription="3D viewer"
-      aria-label={`3D view of ${name}. Drag or use the arrow keys to rotate.`}
+      aria-label={`3D view of ${name}, drag or use arrow keys to rotate`}
       tabIndex={0}
       onKeyDown={onKeyDown}
     >
-      <TieredCanvas tier={tier} className="h-full w-full touch-none">
+      <TieredCanvas
+        tier={tier}
+        className="h-full w-full touch-none"
+        frameloop={still ? 'demand' : 'always'}
+      >
         <Studio tier={tier} />
-        <Float
-          speed={1.4}
-          rotationIntensity={0.15}
-          floatIntensity={0.35}
-          floatingRange={[-0.04, 0.06]}
-        >
-          <Model
-            kind={kind}
-            shadeHex={shadeHex}
-            src={src}
-            lidOpen={lidOpen}
-            transmission={tier === 'high'}
-          />
-        </Float>
+        {still ? (
+          model
+        ) : (
+          <Float
+            speed={1.4}
+            rotationIntensity={0.15}
+            floatIntensity={0.35}
+            floatingRange={[-0.04, 0.06]}
+          >
+            {model}
+          </Float>
+        )}
         <Pedestal />
-        {particles ? (
+        {particles && !still ? (
           <>
             <GoldDust count={settings.particles} />
             <Petals count={Math.round(settings.particles / 6)} />
@@ -144,7 +161,7 @@ export function ProductViewer({
           maxDistance={9}
           minPolarAngle={Math.PI / 5}
           maxPolarAngle={Math.PI / 1.9}
-          autoRotate={spinning}
+          autoRotate={spinning && !still}
           autoRotateSpeed={1.2}
           onStart={pauseSpin}
           onEnd={scheduleResume}
@@ -158,7 +175,7 @@ export function ProductViewer({
       <button
         type="button"
         onClick={reset}
-        className="absolute right-3 bottom-3 rounded-pill bg-white/85 px-3 py-1.5 text-xs font-medium text-ink-900 shadow-soft backdrop-blur transition-colors duration-fast hover:bg-white"
+        className="absolute right-3 bottom-3 inline-flex min-h-11 items-center rounded-pill bg-white/85 px-4 text-sm font-medium text-ink-900 shadow-soft backdrop-blur transition-colors duration-fast hover:bg-white"
       >
         Reset view
       </button>

@@ -37,6 +37,9 @@ export const RequireMfa = () => SetMetadata(REQUIRE_MFA, true);
  */
 export const SellerRoles = (...roles: SellerMemberRole[]) => SetMetadata(SELLER_ROLES, roles);
 
+/** security.md: the global per-IP limit of every route that sets none of its own. */
+export const DEFAULT_PER_MINUTE = 300;
+
 /** Per-IP limit for this route (docs/b2-auth.md §3), on top of the global default. */
 export const PerMinute = (limit: number) => Throttle({ default: { limit, ttl: 60_000 } });
 

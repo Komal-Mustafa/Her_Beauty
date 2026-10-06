@@ -1,5 +1,17 @@
 import { featuredReviewLimit, type HbApi } from '../api';
-import type { Product, ProductCard, ProductQuery } from '@hb/types';
+import { ApiRequestError, sentFields } from '../http/http-api';
+import {
+  estimateDelivery,
+  PkCity,
+  ProductQuery,
+  runSearch,
+  SearchQuery,
+  selectProducts,
+  Slug,
+  toProductCard,
+  type Product,
+  type SearchContext,
+} from '@hb/types';
 import {
   adPackages,
   brands,
@@ -9,6 +21,7 @@ import {
   reviews,
   sellingPlans,
   servedAds,
+  shippingProfiles,
   sponsoredProductSlugs,
   stores,
 } from './fixtures';
@@ -16,56 +29,34 @@ import { featuredBrands, featuredReviews, storefrontStats } from './home-fixture
 
 const DEFAULT_LIMIT = 24;
 
-function toCard(p: Product): ProductCard {
-  const {
-    descriptionHtml: _d,
-    howToUse: _h,
-    ingredients: _i,
-    skinTypes: _s,
-    tags: _t,
-    variants: _v,
-    media: _m,
-    soldCount: _c,
-    ...card
-  } = p;
-  return card;
+/**
+ * The live catalogue as the API loads it: sponsored products flagged, newest first (the seed
+ * dates new products after the rest, in fixture order), so ties sort the same in both adapters.
+ */
+const catalogue: Product[] = products
+  .map((p) => ({ ...p, sponsored: sponsoredProductSlugs.includes(p.slug) }))
+  .sort((a, b) => Number(b.isNew) - Number(a.isNew));
+
+const ctx: SearchContext = { categories };
+
+const categorySlugOfProduct = new Map(
+  products.map((p) => [p.slug, categories.find((c) => c.id === p.categoryId)?.slug]),
+);
+
+type Schema<T> = { safeParse(input: unknown): { success: true; data: T } | { success: false } };
+
+/** Same check and error code as the API edge, so a bad query fails alike in both modes. */
+function validate<T>(schema: Schema<T>, input: unknown): T {
+  const result = schema.safeParse(input);
+  if (!result.success) {
+    throw new ApiRequestError(400, 'VALIDATION_FAILED', 'Some fields are invalid.');
+  }
+  return result.data;
 }
 
-function matches(p: Product, q: ProductQuery): boolean {
-  const categoryId = q.category ? categories.find((c) => c.slug === q.category)?.id : undefined;
-  if (q.category && p.categoryId !== categoryId) return false;
-  if (q.brand?.length && !q.brand.includes(p.brand.slug)) return false;
-  if (q.seller && p.seller.slug !== q.seller) return false;
-  if (q.sellerType && p.seller.type !== q.sellerType) return false;
-  if (q.skinType?.length && !q.skinType.some((s) => p.skinTypes.includes(s))) return false;
-  if (q.minPrice !== undefined && p.price < q.minPrice) return false;
-  if (q.maxPrice !== undefined && p.price > q.maxPrice) return false;
-  if (q.minRating !== undefined && p.rating < q.minRating) return false;
-  if (q.q) {
-    const needle = q.q.toLowerCase();
-    const hay = `${p.title} ${p.brand.name} ${p.seller.storeName}`.toLowerCase();
-    if (!hay.includes(needle)) return false;
-  }
-  return true;
-}
-
-function sortProducts(list: Product[], sort: ProductQuery['sort']): Product[] {
-  const copy = [...list];
-  switch (sort) {
-    case 'newest':
-      return copy.sort((a, b) => Number(b.isNew) - Number(a.isNew));
-    case 'price_asc':
-      return copy.sort((a, b) => a.price - b.price);
-    case 'price_desc':
-      return copy.sort((a, b) => b.price - a.price);
-    case 'rating':
-      return copy.sort((a, b) => b.rating - a.rating);
-    case 'best_selling':
-      return copy.sort((a, b) => b.soldCount - a.soldCount);
-    default:
-      return copy;
-  }
-}
+// Strict, as the controller parses them: a field the endpoint does not take is a 400, not dropped.
+const StrictProductQuery = ProductQuery.strict();
+const StrictSearchQuery = SearchQuery.strict();
 
 /** In-memory implementation of HbApi. Async to match the real HTTP client. */
 export const mockApi: HbApi = {
@@ -82,21 +73,26 @@ export const mockApi: HbApi = {
     return brands.find((b) => b.slug === slug) ?? null;
   },
   async getProducts(query = {}) {
-    const limit = Math.min(query.limit ?? DEFAULT_LIMIT, 100);
-    const start = query.cursor ? Number.parseInt(query.cursor, 10) || 0 : 0;
-    const filtered = sortProducts(
-      products.filter((p) => matches(p, query)),
-      query.sort,
-    );
-    const pageItems = filtered.slice(start, start + limit).map((p) => ({
-      ...toCard(p),
-      sponsored: sponsoredProductSlugs.includes(p.slug),
-    }));
-    const next = start + limit < filtered.length ? String(start + limit) : null;
-    return { items: pageItems, nextCursor: next };
+    const q = validate(StrictProductQuery, sentFields(query));
+    const limit = q.limit ?? DEFAULT_LIMIT;
+    const start = q.cursor ? Number.parseInt(q.cursor, 10) || 0 : 0;
+    const list = selectProducts(catalogue, q, ctx);
+    const next = start + limit < list.length ? String(start + limit) : null;
+    return { items: list.slice(start, start + limit).map(toProductCard), nextCursor: next };
+  },
+  async search(query = {}) {
+    return runSearch(catalogue, validate(StrictSearchQuery, sentFields(query)), ctx);
   },
   async getProduct(slug) {
-    return products.find((p) => p.slug === slug) ?? null;
+    return catalogue.find((p) => p.slug === slug) ?? null;
+  },
+  async getDeliveryEstimate(productSlug, city) {
+    const to = validate(PkCity, city);
+    const slug = validate(Slug, productSlug);
+    const product = catalogue.find((p) => p.slug === slug);
+    if (!product) return null;
+    const store = stores.find((s) => s.id === product.seller.id);
+    return estimateDelivery(store?.city ?? '', to, shippingProfiles[product.seller.id]);
   },
   async getReviews(productId) {
     return reviews.filter((r) => r.productId === productId);
@@ -107,8 +103,13 @@ export const mockApi: HbApi = {
   async getStores() {
     return stores;
   },
-  async getAdSlots(slot) {
-    return servedAds.filter((a) => a.slot === slot);
+  async getAdSlots(slot, opts) {
+    const ads = servedAds.filter((a) => a.slot === slot);
+    if (slot !== 'category_banner' || !opts?.category) return ads;
+    // A category banner is booked in the slot of its product's category (as the seed does).
+    return ads.filter(
+      (a) => a.productSlug !== null && categorySlugOfProduct.get(a.productSlug) === opts.category,
+    );
   },
   async getHeroScenes() {
     return heroScenes;

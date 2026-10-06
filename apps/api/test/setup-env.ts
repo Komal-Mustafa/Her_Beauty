@@ -11,3 +11,5 @@ process.env.TRUST_PROXY = 'loopback';
 // CAPTCHA on (as in production); the auth tests stub the Turnstile network call.
 process.env.TURNSTILE_SECRET_KEY = 'test-only-turnstile-secret';
 process.env.HIBP_ENABLED = 'false';
+// The storefront server's key: its catalogue reads are not rate-limited per IP.
+process.env.STOREFRONT_API_KEY = 'test-only-storefront-key-not-a-secret';

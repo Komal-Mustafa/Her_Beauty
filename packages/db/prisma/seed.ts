@@ -27,6 +27,7 @@ import {
   reviews,
   sellingPlans,
   servedAds,
+  shippingProfiles,
   sponsoredProductSlugs,
   stores,
 } from '@hb/sdk/fixtures';
@@ -266,7 +267,9 @@ async function seedCatalogue(db: Prisma.TransactionClient) {
   });
 
   for (const [index, p] of products.entries()) {
-    const createdAt = new Date(Date.now() - (p.isNew ? 5 + index : 60 + index) * DAY);
+    // The API calls a product new for 30 days and lists newest first: new products are 1–13 days
+    // old, the rest 60+ days, each in fixture order — the order mock mode sorts ties in.
+    const createdAt = new Date(Date.now() - (p.isNew ? 1 + index / 4 : 60 + index) * DAY);
     await db.product.create({
       data: {
         id: idFor(p.id),
@@ -418,6 +421,7 @@ async function seedReviews(db: Prisma.TransactionClient) {
                   rating: l.review.rating,
                   title: l.review.title,
                   body: l.review.body,
+                  photoKeys: l.review.photos.map((photo) => photo.url),
                   createdAt: new Date(l.review.createdAt),
                 },
               },
@@ -429,6 +433,39 @@ async function seedReviews(db: Prisma.TransactionClient) {
     orderNo += 1;
   }
   log(`${reviews.length} verified reviews from ${byAuthor.size} customers`);
+}
+
+/** Each seller's shipping_settings and rate card (the mock adapter reads the same fixture). */
+async function seedShipping(db: Prisma.TransactionClient) {
+  let rates = 0;
+  for (const s of stores) {
+    const profile = shippingProfiles[s.id];
+    if (!profile) continue;
+    const sellerId = idFor(s.id);
+    await db.shippingSetting.create({
+      data: {
+        sellerId,
+        mode: 'manual',
+        handlingDays: profile.handlingDays,
+        freeShippingMin: profile.freeShippingMin === null ? null : BigInt(profile.freeShippingMin),
+        codEnabled: profile.codEnabled,
+      },
+    });
+    await db.shippingRate.createMany({
+      data: profile.rates.map((r) => ({
+        id: uuidv7(),
+        sellerId,
+        zone: r.zone,
+        minWeightG: r.minWeightG,
+        maxWeightG: r.maxWeightG,
+        price: BigInt(r.price),
+        estDaysMin: r.daysMin,
+        estDaysMax: r.daysMax,
+      })),
+    });
+    rates += profile.rates.length;
+  }
+  log(`shipping settings for ${stores.length} sellers, ${rates} rates`);
 }
 
 /** Ad slots, one subscription + creative + live campaign per served ad, and daily bookings. */
@@ -592,6 +629,7 @@ async function main() {
       async (tx) => {
         await seedReferenceData(tx);
         await seedCatalogue(tx);
+        await seedShipping(tx);
         await seedReviews(tx);
         await seedAds(tx);
       },

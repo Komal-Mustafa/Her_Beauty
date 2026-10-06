@@ -12,7 +12,7 @@ import { SearchForm } from './search-form';
 type SiteHeaderProps = { categories: Category[]; nav: NavLink[] };
 
 const iconLink =
-  'relative grid h-11 w-11 place-items-center rounded-pill text-ink-900 transition duration-fast hover:bg-blush-50 hover:text-pink-600';
+  'relative grid h-11 w-11 shrink-0 place-items-center rounded-pill text-ink-900 transition duration-fast hover:bg-blush-50 hover:text-pink-600';
 
 export function SiteHeader({ categories, nav }: SiteHeaderProps) {
   const [scrolled, setScrolled] = useState(false);
@@ -63,8 +63,17 @@ export function SiteHeader({ categories, nav }: SiteHeaderProps) {
           <Menu aria-hidden className="h-5 w-5" />
         </button>
 
-        <Link href="/" aria-label="Her Beauty home" className="shrink-0">
-          <Logo />
+        <Link
+          href="/"
+          aria-label="Her Beauty home"
+          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center"
+        >
+          {/* Under 400 px (the common phone widths, a 320 px phone, 400 % zoom) the round seal
+              alone: seal + wordmark, the menu, search and cart buttons need 391 px at 44 px each,
+              and a header that is wider would squeeze its buttons or scroll sideways
+              (WCAG 1.4.10, 2.5.8). */}
+          <Logo className="max-[24.99rem]:hidden" />
+          <Logo variant="seal" className="h-10 min-[25rem]:hidden" />
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
@@ -122,7 +131,7 @@ export function SiteHeader({ categories, nav }: SiteHeaderProps) {
           ))}
         </nav>
 
-        <SearchForm className="ml-auto hidden w-full max-w-sm md:block" />
+        <SearchForm label="Site search" className="ml-auto hidden w-full max-w-sm md:block" />
 
         <div className="ml-auto flex items-center md:ml-0">
           <Link href="/search" aria-label="Search" className={cn(iconLink, 'md:hidden')}>

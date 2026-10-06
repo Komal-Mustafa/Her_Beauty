@@ -1,9 +1,11 @@
 'use client';
 
-import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import { useEffect, useRef } from 'react';
 import { Color, type MeshPhysicalMaterial } from 'three';
+import { prefersReducedMotion } from '../reduced-motion';
 import { COLORS_3D, GOLD_MATERIAL, LIPSTICK_MATERIAL } from '../tokens';
+import { startTint, stepTint, type Tint } from './tint';
 
 export function GoldMaterial({ deep = false }: { deep?: boolean }) {
   return (
@@ -14,7 +16,12 @@ export function GoldMaterial({ deep = false }: { deep?: boolean }) {
   );
 }
 
-/** A shade-coloured material that eases to a new hex instead of snapping (04 §8 shade swap). */
+/**
+ * A shade-coloured material (the lipstick bullet and band, the compact's pan, the perfume) that
+ * glides to a new hex instead of snapping (docs/p5-catalog.md §5, see tint.ts): ~450 ms, damped.
+ * It asks for frames only while the colour is moving, so a canvas on the `demand` frame loop draws
+ * the whole glide and then goes back to sleep. Reduced motion swaps the colour at once.
+ */
 export function ShadeMaterial({
   hex,
   roughness = LIPSTICK_MATERIAL.roughness,
@@ -23,12 +30,39 @@ export function ShadeMaterial({
   roughness?: number;
 }) {
   const ref = useRef<MeshPhysicalMaterial>(null);
-  const target = useMemo(() => new Color(hex), [hex]);
+  const tint = useRef<Tint | null>(null);
+  const invalidate = useThree((s) => s.invalidate);
+  // The colour prop never changes after mount, so a re-render cannot reset a glide half-way.
   const initial = useRef(hex);
+
+  useEffect(() => {
+    const m = ref.current;
+    if (!m) return;
+    const target = new Color(hex);
+    if (m.color.equals(target)) {
+      tint.current = null;
+      return;
+    }
+    // From wherever the colour is now, so a new pick mid-glide turns smoothly.
+    const next = startTint(m.color, target, prefersReducedMotion());
+    if (next.done) {
+      m.color.copy(target);
+      tint.current = null;
+    } else {
+      tint.current = next;
+    }
+    invalidate();
+  }, [hex, invalidate]);
+
   useFrame((_, delta) => {
     const m = ref.current;
-    if (!m || m.color.equals(target)) return;
-    m.color.lerp(target, Math.min(1, delta * 6));
+    const t = tint.current;
+    if (!m || !t) return;
+    const c = stepTint(t, delta);
+    // Tint endpoints were read from Color, so these are working-space (linear) values too.
+    m.color.setRGB(c.r, c.g, c.b);
+    if (t.done) tint.current = null;
+    else invalidate();
   });
   return (
     <meshPhysicalMaterial

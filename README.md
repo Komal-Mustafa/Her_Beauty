@@ -11,13 +11,13 @@ All product, technical and design decisions live in [`docs/`](docs/00-README.md)
 | `apps/web` | Customer storefront | http://localhost:3000 |
 | `apps/seller` | Vendor + manufacturer portal | http://localhost:3001 |
 | `apps/admin` | Admin console | http://localhost:3002 |
-| `apps/api` | NestJS REST API (`/v1`): catalogue, stores, reviews, ads, plans, home highlights, accounts + login | http://localhost:4000/v1 |
+| `apps/api` | NestJS REST API (`/v1`): catalogue, search with filters, delivery estimates, stores, reviews, ads, plans, home highlights, accounts + login | http://localhost:4000/v1 |
 | `packages/db` | Prisma schema (55 tables), migrations with RLS, seed | – |
 | `packages/auth` | Login for the three apps: server-only API helpers, cookies, middleware, shared auth UI | – |
 | `packages/ui` | Brand components (Button, Badge, ProductCard, Carousel, Marquee, CountUp…) | – |
 | `packages/three` | 3D: device tiers, models, viewer, hero, sidebar ad stage (P2–P4) | – |
 | `packages/sdk` | `getApi()` data client — mock data or the real API (`NEXT_PUBLIC_API_MODE`) | – |
-| `packages/types` | zod schemas shared by every app (money = integer paisa) | – |
+| `packages/types` | zod schemas shared by every app (money = integer paisa), search and delivery rules | – |
 | `packages/config` | tsconfig, eslint, Tailwind 4 brand theme | – |
 
 ## Run it
@@ -64,7 +64,9 @@ SEED_DEMO_PASSWORD='choose-one' SEED_ADMIN_EMAIL=you@example.com pnpm --filter @
 | Admin (`/login`) | the `SEED_ADMIN_EMAIL` account; the first sign-in sets up two-step verification |
 
 Behind a proxy or CDN, set `TRUSTED_PROXY_HOPS` / `CLIENT_IP_HEADER` on the Next apps and
-`TRUST_PROXY` on the API so rate limits see the visitor's real IP (see `.env.example`).
+`TRUST_PROXY` on the API so rate limits see the visitor's real IP (see `.env.example`). With
+`NEXT_PUBLIC_API_MODE=http`, set the same `STOREFRONT_API_KEY` on the web app and the API, so the
+shop's server-side catalogue reads are not rate-limited as one visitor.
 
 Checks (same as CI): `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
 
