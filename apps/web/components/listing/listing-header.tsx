@@ -22,7 +22,7 @@ export function ListingHeader({
   return (
     <header className={cn('flex flex-col gap-2', className)}>
       {eyebrow ? <p className="eyebrow text-gold-800">{eyebrow}</p> : null}
-      <h1 className="font-display text-[34px] font-semibold leading-tight text-balance text-ink-900 md:text-[56px]">
+      <h1 className="font-display text-[34px] font-semibold leading-tight text-balance text-ink-900 [overflow-wrap:anywhere] md:text-[56px]">
         {title}
       </h1>
       {description ? <p className="max-w-2xl text-ink-500">{description}</p> : null}

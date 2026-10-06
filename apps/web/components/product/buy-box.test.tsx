@@ -418,18 +418,20 @@ describe('StickyBuyBar', () => {
     const body = document.body.style;
     await renderBuyBox();
     expect(html.getPropertyValue('--toast-offset')).toBe('');
-    expect(body.getPropertyValue('padding-bottom')).toBe('');
+    expect(html.getPropertyValue('scroll-padding-bottom')).toBe('');
+    // The page already has the bar's height below the footer: the bar can appear after a jump to
+    // the very end and the document must not grow under the reader.
+    expect(body.getPropertyValue('padding-bottom')).toBe('72px');
 
     mainButtonIs('above');
     expect(html.getPropertyValue('--toast-offset')).toBe('72px');
     expect(html.getPropertyValue('scroll-padding-bottom')).toBe('calc(72px + 1rem)');
-    // The page can scroll its footer clear of the fixed bar.
     expect(body.getPropertyValue('padding-bottom')).toBe('72px');
 
     mainButtonIs('visible');
     expect(html.getPropertyValue('--toast-offset')).toBe('');
     expect(html.getPropertyValue('scroll-padding-bottom')).toBe('');
-    expect(body.getPropertyValue('padding-bottom')).toBe('');
+    expect(body.getPropertyValue('padding-bottom')).toBe('72px');
 
     mainButtonIs('above');
     cleanup();

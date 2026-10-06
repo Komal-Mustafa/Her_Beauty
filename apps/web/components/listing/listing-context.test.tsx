@@ -113,6 +113,55 @@ describe('ListingProvider navigation', () => {
   });
 });
 
+describe('ListingProvider focused filter after a change', () => {
+  // jsdom has no layout and no scrollIntoView: the call is what matters.
+  const scrollIntoView = vi.fn();
+  beforeEach(() => {
+    scrollIntoView.mockReset();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      writable: true,
+      value: scrollIntoView,
+    });
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  });
+
+  it('scrolls the label of the focused filter back into view once the results land', async () => {
+    render(<Listing params={params()} total={6} />);
+    const glow = screen.getByRole<HTMLInputElement>('checkbox', { name: /^Glow, 4 products$/ });
+    glow.focus();
+    await act(async () => {
+      fireEvent.click(glow);
+    });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.contexts[0]).toBe(glow.labels?.[0]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'instant' });
+  });
+
+  it('leaves the page alone when focus is not in the filters', async () => {
+    render(
+      <ListingProvider
+        kind="category"
+        path="/category/lips"
+        params={params()}
+        facets={FACETS}
+        total={6}
+      >
+        <SortSelect id={SORT_SELECT_ID} />
+        <FilterPanel idPrefix="t" />
+      </ListingProvider>,
+    );
+    const sort = screen.getByRole('combobox');
+    sort.focus();
+    await act(async () => {
+      fireEvent.change(sort, { target: { value: 'newest' } });
+    });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
 /**
  * The router as Next drives it: a push renders the new route in the transition, which waits
  * (stays pending) until the server answers.

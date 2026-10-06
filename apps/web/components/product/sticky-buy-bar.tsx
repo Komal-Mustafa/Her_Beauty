@@ -13,8 +13,8 @@ const FAR_BELOW = 100_000;
  * up once the buy box's Add to cart has scrolled away above the viewport, and back down when it
  * returns. From 1024 px the buy box itself is sticky, so the bar is not displayed.
  *
- * Shown, it reserves its height at the bottom of the window: as bottom padding on the page (so the
- * footer and the last content can always scroll clear of it), for focus scrolling
+ * The page always has its height as bottom padding (so the footer and the last content can scroll
+ * clear of it). While it is shown it also reserves that height for focus scrolling
  * (`scroll-padding-bottom`) and for the toasts (`--toast-offset`), so no content, focused control
  * or toast ends up behind it (docs/p5-catalog.md §9). Being fixed, it is always where those values
  * say. Hidden, it is `inert` (no focus, not announced) and lets taps through to the page under it.
@@ -43,18 +43,40 @@ export function StickyBuyBar() {
     return () => io.disconnect();
   }, [mainAddRef, outOfStock]);
 
+  // The page always leaves room for the bar's height below the footer, shown or not: the bar
+  // only appears once the buy box's button has scrolled away, which can be after a jump straight
+  // to the end of the page, and the document must not grow under the reader then.
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const page = document.body;
+    const reserve = () => {
+      // 0 from 1024 px, where the bar is not displayed.
+      const height = el.offsetHeight;
+      if (height) page.style.setProperty('padding-bottom', `${height}px`);
+      else page.style.removeProperty('padding-bottom');
+    };
+    reserve();
+    // The height changes with the window (the bar's text, safe area) and to 0 at 1024 px.
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(reserve);
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      page.style.removeProperty('padding-bottom');
+    };
+  }, []);
+
+  // Only while it is shown does the bar cover the bottom of the window, so only then must focus
+  // scrolling and toasts keep clear of it.
   useEffect(() => {
     const el = barRef.current;
     if (!shown || !el) return;
     const root = document.documentElement;
-    const page = document.body;
     const release = () => {
       root.style.removeProperty('scroll-padding-bottom');
       root.style.removeProperty('--toast-offset');
-      page.style.removeProperty('padding-bottom');
     };
     const reserve = () => {
-      // 0 from 1024 px, where the bar is not displayed.
       const height = el.offsetHeight;
       if (!height) {
         release();
@@ -62,10 +84,8 @@ export function StickyBuyBar() {
       }
       root.style.setProperty('scroll-padding-bottom', `calc(${height}px + 1rem)`);
       root.style.setProperty('--toast-offset', `${height}px`);
-      page.style.setProperty('padding-bottom', `${height}px`);
     };
     reserve();
-    // The height changes with the window (the bar's text, safe area) and to 0 at 1024 px.
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(reserve);
     ro?.observe(el);
     return () => {

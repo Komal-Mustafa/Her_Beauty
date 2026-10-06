@@ -153,7 +153,12 @@ export function FilterPanel({ idPrefix, className }: FilterPanelProps) {
   };
 
   return (
-    <form noValidate onSubmit={onSubmit} className={cn('flex flex-col', className)}>
+    <form
+      noValidate
+      onSubmit={onSubmit}
+      data-listing-filters=""
+      className={cn('flex flex-col', className)}
+    >
       {LISTING_FILTERS[kind].map((filter) => (
         <Fragment key={filter}>{groups[filter]()}</Fragment>
       ))}

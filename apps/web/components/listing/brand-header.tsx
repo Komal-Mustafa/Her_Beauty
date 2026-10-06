@@ -32,7 +32,7 @@ export function BrandHeader({ brand, owner, total, className }: BrandHeaderProps
       </span>
       <div className="flex min-w-0 flex-col gap-2">
         <p className="eyebrow text-gold-800">Brand</p>
-        <h1 className="font-display text-[34px] font-semibold leading-tight text-balance text-ink-900 md:text-[56px]">
+        <h1 className="font-display text-[34px] font-semibold leading-tight text-balance text-ink-900 [overflow-wrap:anywhere] md:text-[56px]">
           {brand.name}
         </h1>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-500">

@@ -42,6 +42,23 @@ export type Refocus = () => HTMLElement | null | undefined;
 
 const ListingContext = createContext<ListingState | null>(null);
 
+/**
+ * After a change, the results (and with them the filter groups: options without products go away)
+ * can be shorter, and the page then moves the filter control that was just used out from under the
+ * reader (the sticky sidebar is pushed up by the end of its grid, the drawer's box scrolls up). A
+ * focused filter control that is no longer in view scrolls back into it; `scroll-padding-top` and
+ * the drawer's own box keep it clear of the sticky header (WCAG 2.4.11).
+ */
+function keepFocusedFilterInView() {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement) || !el.closest('form[data-listing-filters]')) return;
+  const target = el instanceof HTMLInputElement && el.labels?.[0] ? el.labels[0] : el;
+  // (jsdom has no layout and no scrollIntoView.)
+  if (typeof target.scrollIntoView === 'function') {
+    target.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }
+}
+
 export function useListing(): ListingState {
   const state = useContext(ListingContext);
   if (!state) throw new Error('useListing needs a ListingProvider');
@@ -130,9 +147,9 @@ export function ListingProvider({
     const from = scrollFrom.current;
     if (pending || from === null) return;
     scrollFrom.current = null;
-    if (from === 0) return;
     queueMicrotask(() => {
-      if (window.scrollY === 0) window.scrollTo({ top: from, behavior: 'instant' });
+      if (from !== 0 && window.scrollY === 0) window.scrollTo({ top: from, behavior: 'instant' });
+      keepFocusedFilterInView();
     });
   }, [pending]);
 
