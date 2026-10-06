@@ -69,7 +69,8 @@ export function ProductDetails({ product, className }: { product: Product; class
           ) : null}
           {ingredients ? (
             <Section id="ingredients-title" title="Ingredients">
-              <p className="text-sm leading-relaxed text-ink-500">{ingredients}</p>
+              {/* About 70 characters of 14 px text a line, like the 16 px text above. */}
+              <p className="max-w-[30rem] text-sm leading-relaxed text-ink-500">{ingredients}</p>
             </Section>
           ) : null}
         </div>

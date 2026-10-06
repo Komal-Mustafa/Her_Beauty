@@ -105,7 +105,7 @@ export default {
 
 Max 2 weights per screen area; line length 60–75 characters.
 
-Exception: the product page H1 sits in the 40 % buy-box column (about 370 px wide at 1024, 470 px at 1280), so it is 34 px below 1280 and 44 px from 1280. At 56 px most product titles would break over three or more lines there and push Add to cart down.
+Exception: the product page H1 sits in the 40 % buy-box column (about 370 px wide at 1024, 470 px at 1280), so it is 34 px below 1280 and 44 px from 1280. At 56 px almost every product title would take two lines there (one in five three lines at 1024) and push the price and Add to cart down.
 
 ## 4. Layout, spacing, shape
 
