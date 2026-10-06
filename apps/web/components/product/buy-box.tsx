@@ -51,7 +51,7 @@ export function BuyBox({ children }: { children?: ReactNode }) {
         >
           {product.brand.name}
         </Link>
-        {/* Smaller than the 56 px H1 in the 40 % column: the exception recorded in 04 §3. */}
+        {/* Smaller than the 56 px H1 in the 40 % column: the exception recorded in docs/p5-catalog.md §5. */}
         <h1 className="font-display text-[34px] font-semibold leading-tight text-ink-900 lg:text-[44px]">
           {product.title}
         </h1>

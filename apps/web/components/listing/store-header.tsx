@@ -60,7 +60,7 @@ export function StoreHeader({ store, total, filtered, className }: StoreHeaderPr
         </span>
         <div className="flex min-w-0 flex-col gap-2 sm:pt-4">
           <p className="eyebrow text-gold-800">Store</p>
-          <h1 className="font-display text-[34px] font-semibold leading-tight text-balance text-ink-900 md:text-[48px]">
+          <h1 className="font-display text-[34px] font-semibold leading-tight text-balance text-ink-900 md:text-[56px]">
             {store.storeName}
           </h1>
         </div>

@@ -13,8 +13,9 @@ import { ListingStatus, useListing } from './listing-context';
  * Below 1024 px (docs/p5-catalog.md §2.1 "Mobile drawer"): a "Filters (n)" button opens the same
  * filter groups in a Radix dialog that slides in from the left. Filters still apply at once; the
  * footer button "Show {total} products" closes it. Radix traps focus and closes on Escape; focus
- * then goes back to the Filters button (the shared Modal has no trigger to return it to). The
- * dialog hides the page from assistive tech, so it reads out the result count itself.
+ * then goes back to the Filters button, set here before the shared Modal's own fallback (which
+ * only refocuses the opener when focus fell to <body>). The dialog hides the page from assistive
+ * tech, so it reads out the result count itself.
  */
 export function FilterDrawer({ className }: { className?: string }) {
   const { params, facets, total, pending } = useListing();

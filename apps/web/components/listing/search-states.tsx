@@ -42,7 +42,7 @@ export function SearchStart(props: SuggestionsProps) {
         <p className="text-ink-500">
           Search products, brands and stores. Spelling slips are fine: “lipstik” finds lipsticks.
         </p>
-        <SearchForm id="search-page-q" className="mt-2" />
+        <SearchForm id="search-page-q" label="Search the catalogue" className="mt-2" />
       </header>
       <SearchSuggestions {...props} />
     </div>
@@ -65,7 +65,7 @@ export function SearchNoResults({ q, ...props }: SuggestionsProps & { q: string 
           }
           className="pb-6"
         />
-        <SearchForm id="search-again-q" className="w-full max-w-md" />
+        <SearchForm id="search-again-q" label="Search the catalogue" className="w-full max-w-md" />
       </div>
       <SearchSuggestions {...props} />
     </div>

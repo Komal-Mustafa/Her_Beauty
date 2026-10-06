@@ -11,13 +11,13 @@ All product, technical and design decisions live in [`docs/`](docs/00-README.md)
 | `apps/web` | Customer storefront | http://localhost:3000 |
 | `apps/seller` | Vendor + manufacturer portal | http://localhost:3001 |
 | `apps/admin` | Admin console | http://localhost:3002 |
-| `apps/api` | NestJS REST API (`/v1`): catalogue, stores, reviews, ads, plans, home highlights, accounts + login | http://localhost:4000/v1 |
+| `apps/api` | NestJS REST API (`/v1`): catalogue, search with filters, delivery estimates, stores, reviews, ads, plans, home highlights, accounts + login | http://localhost:4000/v1 |
 | `packages/db` | Prisma schema (55 tables), migrations with RLS, seed | – |
 | `packages/auth` | Login for the three apps: server-only API helpers, cookies, middleware, shared auth UI | – |
 | `packages/ui` | Brand components (Button, Badge, ProductCard, Carousel, Marquee, CountUp…) | – |
 | `packages/three` | 3D: device tiers, models, viewer, hero, sidebar ad stage (P2–P4) | – |
 | `packages/sdk` | `getApi()` data client — mock data or the real API (`NEXT_PUBLIC_API_MODE`) | – |
-| `packages/types` | zod schemas shared by every app (money = integer paisa) | – |
+| `packages/types` | zod schemas shared by every app (money = integer paisa), search and delivery rules | – |
 | `packages/config` | tsconfig, eslint, Tailwind 4 brand theme | – |
 
 ## Run it

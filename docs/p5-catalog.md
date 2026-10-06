@@ -32,6 +32,11 @@ P5 is split into two PRs so each stays reviewable:
 Unknown slugs call `notFound()` (the P1 not-found page). Every listing and the product page have a
 `loading.tsx` skeleton (blush-50 blocks with shimmer) and use the shop layout's `Container`.
 
+As built: because `loading.tsx` streams the page, the page body arrives in the streamed part, so
+listing and product content need JavaScript (the skeleton is what a no-JS client sees). A route
+`layout.tsx` loads the category, brand, store or product first and calls `notFound()` there, so an
+unknown slug is still a real HTTP 404 and not a 200 with a not-found body.
+
 Breadcrumbs (`nav aria-label="Breadcrumb"`, ordered list, `aria-current="page"` on the last item)
 on every page except `/search`: Home › Category › Product, Home › Brands › Brand, Home › Store.
 
@@ -53,7 +58,7 @@ Breadcrumbs
 - Grid: `grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4`, gap-x 16/24, gap-y 32, cards
   are `ShopProductCard` (P4). The first 4 cards get `priority` images (LCP).
 - 24 products per page. Numbered pagination (`nav aria-label="Pagination"`: Previous · 1 2 … n ·
-  Next, `aria-current="page"`), plain links, so pages work without JavaScript, can be shared and
+  Next, `aria-current="page"`), plain links, so pages can be shared and
   are crawlable. Changing a filter or sort resets to page 1.
 - **Filters apply at once.** Each change calls `router.push(url, { scroll: false })` inside
   `startTransition`; while pending the grid fades to 60% and gets `aria-busy="true"`. A polite live
@@ -105,7 +110,8 @@ value is dropped, never an error page). Money in the URL is whole rupees; the we
 
 `generateMetadata`: title "{H1} | Her Beauty", a one-line description. Canonical is the page path
 plus `?page=n` when n > 1. Pages with any filter or sort param, and every `/search` page, are
-`robots: { index: false, follow: true }`.
+`robots: { index: false, follow: true }`. A `?page=` past the last page stays 200 with an empty
+state that links back to page 1, and is `noindex, follow` too.
 
 ## 3. Data contracts
 
@@ -277,7 +283,9 @@ More from {store} (carousel) · Similar products (carousel) · Recently viewed (
 - **Live shade (exit check):** the shade picker drives the viewer's `shadeHex`; the lipstick bullet
   and the compact's pan **re-tint smoothly** (colour damped over ~450 ms, then the demand frame loop
   stops; instant with reduced motion). The 3D tab label keeps the gold "3D" chip.
-- **Buy box:** brand eyebrow link; H1; `Rating` + "{ratingCount} ratings" link to `#reviews`; `Price`
+- **Buy box:** brand eyebrow link; H1 (34 px, 44 px from 1280: smaller than the 56 px page H1 of
+  04 §3, because it sits in the 40 % buy-box column, where 56 px would put almost every title on two
+  lines and push the price and Add to cart down); `Rating` + "{ratingCount} ratings" link to `#reviews`; `Price`
   with compare-at and "-n%" badge; `ShadePicker` (sold-out shades marked, still selectable to see
   them); size pills when variants differ by `sizeLabel` instead of shade; stock note ("Only 3 left"
   at ≤ 5, "Out of stock"); quantity stepper 1…min(10, stock) with − and + buttons and a labelled
@@ -344,6 +352,9 @@ The demo catalogue grows to what the plan promised (frontend-plan §8: ≈ 40 pr
 - `descriptionHtml` (seller-written later) is sanitized on render in a server-only helper
   (`isomorphic-dompurify`): allowed tags `p br strong em b i u ul ol li h3 h4 blockquote`, **no
   attributes**, so no `on*`, `style`, links or `javascript:`. Unit tests with hostile input.
+  Very deep nesting (thousands of levels) overflows jsdom's stack and that one product page fails
+  with a 500 (no XSS, no stack trace). Descriptions only come from the seed in P5a; the seller
+  description editor (P7) must cap length and nesting depth when it saves.
 - JSON-LD is serialised with `JSON.stringify` and `<` escaped as `<`, so product text cannot
   close the script tag.
 - Every server action and API query is zod-validated; ids from localStorage are re-validated.
